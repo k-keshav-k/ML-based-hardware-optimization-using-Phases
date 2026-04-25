@@ -19,11 +19,14 @@ conda activate \${CONDA_ENV:-llmr}
 set -euo pipefail
 
 export PYTORCH_CUDA_ALLOC_CONF=\${PYTORCH_CUDA_ALLOC_CONF:-expandable_segments:True}
+export UV_LINK_MODE=\${UV_LINK_MODE:-copy}
 export UV_PROJECT_ENVIRONMENT=\${UV_PROJECT_ENVIRONMENT:-.venv}
 export PHASE_ML_CONFIG=\${PHASE_ML_CONFIG:-config/phase_ml_indep_a100.json}
 
 cd \${PROJECT_DIR:-/scratch/kk6081/Phase-pipeline/ML-based-hardware-optimization-using-Phases}
 mkdir -p /scratch/kk6081/indep/phase_ml_core_uncore_large logs
+echo \"PROJECT_DIR=\$(pwd)\"
+echo \"PHASE_ML_CONFIG=\${PHASE_ML_CONFIG}\"
 
 if ! command -v uv >/dev/null 2>&1; then
   echo 'uv is not available in this container/conda environment. Install uv before submitting this job.' >&2
@@ -34,6 +37,8 @@ uv sync --extra phase-ml
 
 uv run -m phase_ml.build_dataset \
   --config \${PHASE_ML_CONFIG}
+
+uv run python -c \"import os; from pathlib import Path; from phase_ml.config import load_config; from hpc_phase_analysis.io_utils import read_json; c=load_config(os.environ['PHASE_ML_CONFIG']); p=Path(c['dataset']['output_dir']) / 'feature_manifest.json'; m=read_json(p); print('Dataset manifest:', m); raise SystemExit('Dataset build produced no PARSEC interval rows. Check dataset.input_csv and the suite column.') if int(m.get('interval_rows', 0)) == 0 else None; raise SystemExit('Dataset build produced no training windows. Reduce sequence_length/prediction_horizon or check run lengths.') if int(m.get('windows', 0)) == 0 else None\"
 
 uv run -m phase_ml.label_phases \
   --config \${PHASE_ML_CONFIG}
