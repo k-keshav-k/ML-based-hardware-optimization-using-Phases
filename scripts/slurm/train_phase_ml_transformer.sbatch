@@ -1,6 +1,6 @@
 #!/bin/bash
 #SBATCH --job-name=phase_ml_transformer
-#SBATCH --account=csci_ga_3033_131-2026sp
+#SBATCH --account=bmsc_ga_4551-2026sp
 #SBATCH --partition=c12m85-a100-1
 #SBATCH --output=./logs/%j_%x.out
 #SBATCH --error=./logs/%j_%x.err
