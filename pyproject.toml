@@ -1,0 +1,28 @@
+[project]
+name = "hardware-counter-phase-analysis"
+version = "0.1.0"
+description = "Perf-based hardware-counter correlation and PARSEC phase-ML pipeline."
+readme = "README.md"
+requires-python = ">=3.9"
+dependencies = [
+    "Markdown>=3.4",
+    "jupyter>=1.0",
+    "matplotlib>=3.6",
+    "numpy>=1.23",
+    "scipy>=1.9",
+]
+
+[project.optional-dependencies]
+phase-ml = [
+    "torch>=2.1",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["hpc_phase_analysis", "phase_ml"]
+
+[tool.uv]
+package = true

@@ -1,0 +1,344 @@
+Sl,Paper title,Authors of the paper,Journal,Year,Link to the paper,5-7 sentence summary
+1,"Automatically Characterizing
+Large Scale Program Behavior","Timothy Sherwood, Erez Perelman, Greg Hamerly, Brad Calder",ACM SIGPLAN Notices,2002,https://cseweb.ucsd.edu/~calder/papers/ASPLOS-02-SimPoint.pdf,"Goal: Programs exhibit massive variations in behavior over billions of instructions, making. The goal is to automatically identify the large-scale patterns to enable accurate, efficient analysis and simulation.
+
+How: Using Basic Block Vectors (BBVs)
+Definition of BBV: A hardware-independent ""fingerprint"" that counts how many times each block of code is entered during a fixed interval (e.g., 100M instructions) 
+
+Comparison: The similarity between intervals is measured using Manhattan distance; if two intervals have similar BBVs, their performance behavior is likely similar.
+
+Phase Definition: ""phase"" is not just a contiguous block of time with no change in a metric, but as any collection of intervals with similar behavior, even if they are far apart in execution .
+
+Algorithm: 
+Profile: Collect BBVs for every interval.
+Reduce: Project data down to 15 dimensions (Random Linear Projection) for efficiency.
+Cluster: Use k-means clustering to group similar intervals.
+Evaluate: Use the Bayesian Information Criterion (BIC) to automatically select the optimal number of clusters (k).
+
+Application: (SimPoint)
+Strategy: Instead of simulating the whole program, select one representative interval from each cluster.
+
+Result: By simulating these few points and weighting them by the size of their clusters, accurate full-program behavior can be captured in minutes rather than months ."
+2,Phase Tracking and Prediction,"Timothy Sherwood, Suleyman Sair, Brad Calder",ACM SIGARCH Computer Architecture News,2003,https://dl.acm.org/doi/pdf/10.1145/871656.859657,"Problem: Processors execute billions of instructions/second; cycle-level view misses large-scale recurring patterns .
+
+Goal: Efficient runtime phase detection and prediction to guide optimizations (power, cache, etc.).
+
+Key Distinction: Tracks code execution proportions (frequency), not just working sets(old apparoaches).
+
+Hardware Mechanism: ""Fingerprint"" based on basic block execution frequency 
+Implementation: Accumulator Table: Hashed Branch PCs increment counters by instruction count. Profiled every 10 million instructions.
+
+Classification: ""Fingerprint"" compared to Past Footprints Table using Manhattan distance.
+If difference < threshold, classify as existing Phase ID; otherwise create new ID .
+
+Overhead: Requires < 500 bytes of on-chip memory.
+Challenge: Simple predictors fail at phase transitions (stable to unstable).
+Solution: Run-Length Encoded (RLE) Markov Predictor.Method: Uses {Last Phase ID, Run Length} to index prediction table.
+Result: Predicts when phase ends and what comes next; reduces mispredictions to ~14%."
+3,"Basic Block Distribution Analysis to Find Periodic Behavior and
+Simulation Points in Applications","Timothy Sherwood, Erez Perelman, Brad Calder",Conference on Parallel Architectures and Compilation Techniques (PACT,2001,https://sites.engineering.ucsb.edu/~sherwood/pubs/PACT-bbda.pdf,"Methodology: Basic Block Vectors (BBVs)
+
+Metric: Hardware-independent ""fingerprint"" of code execution for fixed intervals (e.g., 100M instructions) .
+Dimensions: Each dimension maps to a unique Static Basic Block (single entry/exit code section) in the binary.
+
+Values (Weighting): Calculated as (Block Execution Count) *(Number of Instructions in Block); ensures long blocks contribute more to fingerprint than short ones .
+
+Normalization: Vector elements divided by total sum; captures proportion of work rather than raw magnitude.
+
+Comparison: Manhattan Distance (sum of absolute differences) calculates similarity score (0–2) between intervals.
+
+Analysis: Finding Periods & Phases
+Plots the difference between each interval's BBV and the ""Target BBV"" (the average of the entire program execution) to visualize how behavior diverges over time .
+
+Simulation Strategy
+Preferred Period: Simulates one full period starting at the point in the trace with the minimum difference score (closest match to full program behavior) .
+Limited Simulation: If time is constrained (e.g., 300M instructions), the algorithm selects the 300M slice with the lowest difference score from the graph .
+
+Results
+Correlation: The periodicity of basic blocks strongly reflects the periodicity of architectural metrics (IPC, branch miss rates, cache miss rates), proving code structure drives performance.
+Accuracy (Full Period): Simulating a single complete period results in an IPC error of less than 5% compared to full execution.
+Accuracy (Limited): Using this method to select a short 300M instruction slice keeps IPC error to 6% or less, significantly outperforming simulation that simply starts after initialization ."
+4,Detecting phases in parallel applications on shared memory architectures,"Erez Perelman, Marzia Polito, Jean-Yves Bouguet, John Sampson, Brad Calder, Carole Dulong","IPDPS'06: Proceedings of the 20th international conference on Parallel and distributed processing
+",2006,https://dl.acm.org/doi/10.5555/1898953.1899021,"Objectives
+* Extension of serial phase analysis (SimPoint) to shared memory parallel applications (2-4 cores).
+* Primary Goal: Track phase scalability across varying thread counts (identify which code sections benefit from parallelism).
+* Secondary Goal: Guide multi-threaded architecture simulation (Parallel SimPoint).
+
+Hardware & Validation Metrics
+* Platform: 4-node Intel Itanium II (private L2/L3 caches, shared main memory, 1 thread/node).
+* Benchmarks: OpenMP, p-threads, NAS Parallel Benchmarks (NPB), bioinformatics (SNP, SVM RFE).
+* Validation Metric: Standard deviation (variance) of hardware metrics (CPI, L2/L3 hit rates).
+* Success Condition: Intra-phase variance significantly lower than total execution variance.
+
+Profiling & Data Collection
+* Tool: Intel VTune Performance Analyzer (runs on native hardware, <2% overhead).
+* Metric: Extended Instruction Pointers (EIPs) sampled once every 100k instructions.
+* Vector Creation: EIP Vectors (EIPVs) track sampled EIP frequencies per interval.
+* EIPs mapped back to static code blocks via binary analysis (Pin).
+* Result: Sampled Basic Block Vectors (BBVs) (filters out sampling noise).
+
+Algorithm: Single Parallel Run
+* Flawed Approach: Agglomerating all thread data (destroys per-thread visibility/inconsistent).
+* Chosen Approach: Independent per-thread tracking.
+* Step 1: Create 100M instruction Sampled BBVs per thread independently.
+* Step 2: Concatenate all individual thread traces end-to-end (no mixing).
+* Step 3: Cluster entire dataset simultaneously.
+* Timeline Mapping: Map per-thread intervals to ""global instruction count"" timeline.
+* Visualization: Highlights parallel execution, divergent thread roles, and stalls (white spaces) coherently.
+
+Results: Single Parallel Run
+* Baseline Variance: High variation across benchmarks (e.g., `is.B` highly variable due to 80% serial code; `ep.B` highly stable).
+* Parallel Overhead: Per-thread CPI often increases from 2T to 4T due to synchronization/overhead.
+* Variance Reduction: Algorithm highly successful at grouping homogeneous behavior.
+* CPI std dev: ~50% reduction.
+* L2 Hit Rate std dev: ~60% reduction.
+* L3 Hit Rate std dev: ~45% reduction.
+
+Cross-Run Phase Discovery (Scalability)
+* Objective: Analyze phase behavior varying the number of threads (1T, 2T, 3T, 4T).
+* Method: Concatenate Sampled BBVs from *all* runs (different thread counts) into one massive trace, then cluster.
+* Findings:
+* Identifies identical execution regions across different thread counts.
+* Constant Volume: Total instructions executed *per phase* remains constant regardless of thread count.
+* Variable Speedup: Cycles (time) spent per phase decreases at different rates; reveals exact scalability limits of specific code sections.
+
+Parallel SimPoint
+* Objective: Accurate full-program estimation via minimal multi-threaded simulation.
+* Selection: Pick one representative interval (centroid) per phase cluster (thread-agnostic).
+* Weighting: Multiply simulation results by the phase's percentage of total program execution.
+* Results: ~3% average CPI error for 2-thread runs; max error <15%.
+* Key Insight: Consistent relative error (bias in the same direction) makes the tool highly reliable for hardware design space exploration, even with minor absolute errors."
+5,P4: Phase-based power/performance prediction of heterogeneous systems via neural networks,Yeseong Kim; Pietro Mercati; Ankit More; Emily Shriver; Tajana Rosing,2017 IEEE/ACM International Conference on Computer-Aided Design (ICCAD),2017,https://ieeexplore.ieee.org/document/8203843,"Objectives
+* Target: Cross-platform power and performance prediction for workload migration in heterogeneous systems (servers, mobile, IoT).
+* The Problem: Traditional PMC-based linear models failing across different CPU architectures (e.g., x86 vs. ARM). Source-code instrumentation causing unacceptable overhead.
+* Proposed Solution:  framework. Dynamic identification of machine-independent phases using *only* runtime hardware PMCs and Neural Networks (no source code required).
+
+Single-Machine Characterization (Offline)
+* Objective: Construction of baseline power models and local phase identification per machine.
+* Automated Event Selection (Lasso): Utilization of l1-regularization (Lasso) to filter out weakly correlated PMCs.
+* Elimination of manual, domain-expert selection.
+* Isolation of ~11-12 highly power-correlated PMCs (e.g., L1/LLC misses, branch misses).
+
+* Phase Extraction (Clustering):
+* Application of k-means clustering to group PMC vectors into distinct ""application phases.""
+* kNeedle Algorithm: Automated selection of optimal cluster count () by finding the ""knee"" (convergence point) in the standard deviation curve.
+* k-means++: Used for optimal initial centroid placement.
+
+Cross-Platform Phase Recognition
+* Objective: Mapping phases from Machine A () to Machine B () despite massive ISA differences (e.g., CISC vs. RISC).
+* NN-Based Event Pattern Recognition:
+* Identification of ""best-pattern duration pair"" aligning execution timelines across architectures.
+* Use of Pearson Delta metric to locate strongly correlated PMC behavioral trends.
+* Workload Neural Network (): Trained to predict total instruction count on  using solely PMCs from .
+* Training safeguards: Halts if  to prevent corruption from bad data alignment.
+
+* Phase Matching: Modified k-means mapping of 's identified phases directly onto 's dataset to establish universal, cross-platform phases.
+
+Performance and Power Prediction (ML Models)
+* PMC Prediction NN (): * Learning per-phase event translations across platforms via Cumulative Distribution Functions (CDF).
+* Prediction of 's future PMCs based on 's current PMCs.
+* Runtime Execution Pipeline (Online):
+* Input: Live PMCs from local machine ().
+* Power Prediction:  output fed directly into target 's Lasso regression power model.
+* Time Prediction: Calculated as predicted instructions () divided by predicted speed ().
+* Frequency Scaling: Bypass of  for same-architecture frequency shifts (instruction count remains static).
+
+Evaluation & Results
+* Hardware & Benchmarks: Tested on 4 platforms (Intel x86, Sun, Dell, Odroid ARM big.LITTLE) across 3 frequency levels using 129 industry-standard benchmarks.
+* Validation: ""Leave-one-out"" cross-validation with Mean Absolute Percentage Error (MAPE).
+* Single-Machine Power Accuracy: Lasso matching 22-PMC Linear Regression accuracy; outperforming domain-expert models (3.2% - 7.5% error).
+* Cross-Platform Prediction Accuracy:
+* Server-to-Server migration: 5.2% average power error.
+* big.LITTLE (ARM A7  A15): 6.9% average power error.
+* Extreme Migration (x86 8-thread  ARM 4-thread): 6.8% - 7.2% average power error.
+* Performance (IPS) Error:  across all architecture combinations.
+
+* System Overhead: Online PMC processing  (negligible vs. 250ms sampling rate). Offline training ~200 mins (one-time cost)."
+6,"A Run-Time Program Phase Detection Technique
+for Optimizing Per-Phase L2 Cache Demand","Ibrahim E. Ziedan, Hazem I. Shehata and Shaymaa M. Serag","The Egyptian International Journal of
+Engineering Sciences and Technology",2016,https://www.semanticscholar.org/reader/5bb6aed259699b3cbd192bcfd270eec1e327e41f,"Core Objectives
+* Run-time phase detection and classification without source code/recompilation.
+* Primary goal: Estimate per-phase L2 cache demand to optimize utilization.
+* Method: Track L2 cache access patterns (hybrid of Working Set Signatures and Basic Block Vectors).
+
+Data Collection (Hardware-Level)
+* Tool: Intel Performance Monitoring Unit (PMU) via Linux `perf_events`.
+* Hardware Features: Precise Event-Based Sampling (PEBS) & Data Linear Address (DLA).
+* Tracked Event: `MEM_LOAD_UOPS_RETIRED.L1_MISS`.
+* Mechanism: When an L1 data miss occurs (triggering an L2 access), the PMU captures the specific memory address.
+
+Vector Construction: Cache Access Signature Vector (CASV)
+* Structure: 1D array; total elements () = number of sets in the L2 cache.
+* Mapping: Captured memory addresses are hashed to their corresponding L2 cache set.
+* Value: The array element (a n-bit saturating counter) increments, capturing both *which* sets are accessed and the *access intensity*.
+
+Phase Classification Algorithm
+* Signature History Table: Stores one representative CASV per unique Phase ID.
+* Similarity Metric: Dot Product (). Rewards intervals accessing the exact same cache sets with similar intensities.
+* Matching Logic: Compares current CASV against all table representatives.
+* Selects the *best* match (highest dot product above threshold), not just the first match.
+* Overwrites the matched representative with the current CASV to keep data fresh.
+* If no match, creates a new Phase ID.
+
+Noise Filtering (Handling Transitions)
+* Problem: Short, unstable intervals (transitions) waste optimization resources.
+* Solution: ""Phase Zero"" bucket.
+* Stabilization: New signatures get assigned to Phase Zero. An ""Interval Counter"" tracks consecutive matches. Only receives a real Phase ID after crossing a ""Transition Threshold"".
+
+Cache Demand Estimation & Results
+* Estimation Metric: L2 Cache Demand = Count of non-zero elements in a phase's representative CASV.
+* Overhead: Extremely low (~4% execution time penalty).
+* Validation: Detected phases exhibit strong correlation with architectural metrics like IPC."
+7,Learning-based Phase-aware Multi-core CPU Workload Forecasting,"ESA Lozano, A Gerstlauer",ACM Transactions on Design Automation of Electronic Systems,2022,https://dl.acm.org/doi/pdf/10.1145/3564929,"Goal: Predict multi-core CPU workload metrics (e.g., Cycles Per Instruction - CPI) for dynamic resource optimization (DVFS, thermal management, cache tuning).
+Problem: Workloads have abrupt ""phase"" changes. Single ""phase-unaware"" AI models fail during these shifts.
+Gap: Prior work ignores multi-core interference (shared resource contention).
+
+Proposed Solution: 3-Stage Phase-Aware Pipeline
+Stage 1: Phase Classification & Separation
+• Groups hardware counter data into distinct phases (unsupervised).
+• Splits chaotic time-series into isolated, smooth ""phase buckets"".
+
+Stage 2: Phase Prediction
+• Predicts future phases using historical data.
+
+Stage 3: Phase-Based Forecasting
+• Uses highly specialized models (one per phase) to predict exact CPI values.
+• Uses Stage 2 predictions to select which model's output to use.
+
+Multi-Core Architectures Evaluated
+Global (G): 1 model views all cores, predicts all cores simultaneously.
+Local (L): N models (1 per core). Views local core only, predicts local core only.
+Distributed (D): Views all cores (interference-aware), predicts local core only.
+Shared Variants (L-S, D-S): Cores share trainable parameters to save memory and transfer learning.
+
+Methodology & Algorithms Tested
+Hardware: 4-core Intel Core i9, PARSEC & SPEC CPU2017 benchmarks, 10ms sampling (PMU counters).
+Dimensionality Reduction: PCA used.
+Target Horizon: k = 20.
+
+Stage 1 (Classifiers)
+• Two-level k-means (2kmeans): Window-based filtering + k-means.
+• Filtered GMM (fgmm): Filtered Gaussian Mixture Model.
+
+Stage 2 (Predictors)
+Window-based:
+• Predicts next k intervals using raw counter history.
+• Models tested: Decision Trees (DT) vs LSTM.
+
+Phase-Change:
+• Predicts next phase ID + duration using Run-Length Encoding.
+• Model tested: SVM.
+
+Stage 3 (Forecasters)
+• Predicts actual CPI values using isolated phase data.
+• Models tested: SVM vs LSTM.
+
+Key Results & Findings
+Classification Winner: fgmm > 2kmeans (lower noise/variance).
+Phase Quality: Global (G) gives smoothest phases; Local-Shared (L-S) gives longest phases.
+
+Prediction Winner: Window-based LSTM > DT.
+Phase-change prediction (SVM) failed on PARSEC due to overly long phase durations (insufficient transition data).
+Highest prediction accuracy: L-S setting.
+
+Forecasting Winner: LSTM > SVM.
+
+The Distributed Flaw:
+Distributed (D) models performed worse than Local (L).
+Looking at other cores confused models during asynchronous phase shifts.
+
+Best Overall Pipeline
+Architecture: (L, L, L)
+Models: (fgmm, Window-LSTM, Forecaster-LSTM)
+
+Performance Gain
+Phase-aware approach yields up to 22% error reduction compared to phase-unaware baseline.
+
+Overhead & Implementation Constraints
+Fastest Components:
+• fgmm clustering
+• DT/SVM predictors
+Inference time: < 2.5 ms
+
+Bottleneck:
+• LSTM forecasting (~4 ms inference per sample)
+
+Conclusion
+Highly accurate, but real-world online deployment requires hardware accelerators or neural network pruning."
+8,Phase-based Frequency Scaling for Energy-efficient Heterogeneous Computing,"Lorenzo Carpentieri, Antonio De Caro, Majid Salimi Beni, Kaijie Fan, and Biagio Cosenza","2025 IEEE International Parallel and Distributed Processing Symposium (IPDPS)
+",2025,https://ieeexplore.ieee.org/stamp/stamp.jsp?arnumber=11078489,"Objectives
+Target: Energy-efficient frequency scaling on heterogeneous multi-GPU systems (AMD, Intel, NVIDIA).
+The Problem: Coarse-grained DVFS (one frequency per application) ignores per-kernel energy diversity; fine-grained DVFS (one frequency per kernel) incurs costly frequency-change overhead (0.30–0.60 ms per change), which can negate energy savings — especially for applications with many lightweight kernels in loops.
+Proposed Solution: A phase-based approach that groups kernels with similar energy characteristics into ""phases,"" sets one optimal frequency per phase, and hides frequency-change overhead by overlapping it with MPI communication in multi-GPU programs.
+
+Methodology
+Application modeled as an Energy-aware DAG extracted from SYCL task graphs: vertices = kernels, edges = dependencies, annotated with time/energy across all frequencies.
+One-shot profiling at default frequency + SYnergy energy prediction model eliminates the need to run the application at every frequency. Loop repetition counts stored as metadata to avoid DAG explosion.
+Three phase detection algorithms compared: Dynamic Programming (optimal, O(|T|⁴)), Greedy (O(|T|²)), and Clustering (O(|T|²)). Clustering selected — achieves 83%–100% of optimal energy savings with tractable complexity.
+Cost Function balances: frequency-change overhead, task execution time at the chosen phase frequency, and loop repetition factors.
+
+MPI-Aware Extension
+DAG extended with MPI Sync nodes representing communication wait times.
+Key Insight: Blocking MPI calls converted to non-blocking variants, allowing frequency changes to execute concurrently with data transfer — making the overhead effectively zero when communication time exceeds the switch latency.
+
+Key Results
+Single-GPU: Up to 37% energy saving and 1.87× speedup. Phase-based consistently outperforms both coarse- and fine-grained across AMD MI100, Intel Max 1100, and NVIDIA V100S. Largest gains on NVIDIA (50.5× faster than fine-grained for mnist) due to high NVML overhead.
+Multi-GPU (4 Intel GPUs): Phase-MPI achieves 1.79×–1.86× speedup and 43%–45% energy reduction over fine-grained for two real-world MPI applications (CloverLeaf, miniWeather).
+Scalability (16 NVIDIA A30 GPUs): 35% energy savings and 1.45× speedup over fine-grained, with Phase-MPI remaining the most efficient method at every GPU count.
+
+Key Distinction from Prior Work
+First approach combining phase-based DVFS + heterogeneous GPU support + MPI communication-frequency overlap. Portable across three GPU vendors via SYCL, with a one-time profiling cost of ~7 minutes."
+9,Sampling-Based Phase Classification and Prediction for Multi-threaded Program Execution on Multi-core Architectures,Chin-Hao Chang; Pangfeng Liu; Jan-Jan Wu,International Conference on Parallel Processing (ICPP),2013,https://ieeexplore.ieee.org/document/6687368,"Objectives
+Target: Online phase classification and next-phase prediction for multi-threaded parallel programs on multi-core architectures.
+The Problem: Prior phase detection work mostly focused on single-threaded programs using full code signatures collected on simulators — too expensive for real-time use with parallel programs on real hardware.
+Proposed Solution: A lightweight sampling-based framework that collects code signatures per thread at runtime, classifies intervals into phases using a shared centroid table, and predicts the next phase using Markov-based methods — all with under 3KB of memory.
+
+Phase Classification Framework
+Code Signature: Sampled Frequency Vector — a 32-dimensional vector built by sampling one Extended Instruction Pointer (EIP) per 1M instructions retired, right-shifting the EIP by 8 bits to approximate its basic block region, hashing to one of 32 counters. One interval = 100M instructions (100 samples).
+Classification: Manhattan distance between the current interval's vector and all centroid vectors in a shared Centroid Table. If minimum distance < similarity threshold (set to 61), classify into that phase and update centroid; otherwise create a new phase. LRU replacement when phases exceed 64 entries.
+Shared Centroid Table: All threads share a single table, enabling cross-thread identification of intervals executing the same code sections with the same phase IDs.
+Confidence Table: Acts as a noise filter — new groups must accumulate a minimum number of intervals (Min Counter threshold) before being promoted to the centroid table as a real phase. Groups below the threshold are labeled ""Transition Phase"" (phase ID 0). Dramatically reduces spurious phases and improves prediction accuracy.
+
+Phase Prediction Methods
+Six methods implemented, all on a per-thread basis (each thread maintains its own prediction table): Last Value Prediction, 1-Level and 2-Level Markov Chain, 1-Level and 2-Level Run-Length Encoding (RLE) Markov Chain, and Enhanced RLE Markov Chain (stores full history).
+RLE methods append the burst length (consecutive intervals in the same phase) to the phase ID as the prediction key, capturing not just which phase but how long the program has been in it.
+
+Key Results
+Classification quality: ~5% CV of IPC across phases on average, comparable to offline SimPoint clustering and to the more expensive approach of mapping each EIP back to its actual basic block.
+Runtime overhead: <6% compared to direct execution; system requires only ~2,560 bytes of memory.
+Prediction accuracy without confidence table: ~65% (1-Level RLE Markov), ~73% (Enhanced RLE Markov). With confidence table (Min Counter = 8): ~80% (1-Level RLE Markov), ~85% (Enhanced RLE Markov), with average phases detected dropping from 77 to 27.
+Confidence table provides at least 20% misprediction reduction for noise-heavy benchmarks (fma3d_m, bodytrack).
+Tested on 9 SPEC OMP2001 and 3 PARSEC benchmarks on Intel Xeon E5410 (8 cores), with 1–8 threads. Classification quality degrades slightly at 8 threads due to memory bandwidth contention and synchronization overhead.
+
+Key Distinction from Prior Work
+Unlike prior online methods that collect full code signatures on simulators, this framework runs on real hardware using only sampled EIPs with a bit-shifting approximation (no pre-built mapping tables needed). Unlike Perelman et al.'s SimPoint-based offline approach for parallel programs, this method operates entirely online with comparable or better classification quality (lower CV of IPC) while also providing next-phase prediction capability."
+10,"Predicting Program Phases and Defending Against Side-Channel Attacks
+using Hardware Performance Counters","Junaid Nomani, Jakub Szefer
+",HASP '15: Proceedings of the Fourth Workshop on Hardware and Architectural Support for Security and Privacy,2015,https://dl.acm.org/doi/pdf/10.1145/2768566.2768575,"Objectives
+Target: Mitigating microarchitectural side-channel attacks through security-aware OS scheduling, with secondary performance benefits from reduced functional unit contention.
+The Problem: Applications sharing the same core share functional units (caches, FPUs, branch predictors), creating side-channel attack surfaces. Current schedulers are blind to what hardware resources applications are using and cannot prevent dangerous co-scheduling.
+Proposed Solution: Augment the Linux scheduler with hardware performance counter (HPC) monitoring and a neural network predictor that forecasts upcoming program phases, enabling proactive scheduling of applications with dissimilar resource demands onto the same core.
+
+System Architecture
+Three components: (1) Modified kernel scheduler that resets/reads HPCs at each context switch and stores values in the task structure; (2) PMC kernel module that asynchronously relays counter data; (3) User-space ML module that runs the neural network and returns predictions.
+Predictions written back into the task structure so the scheduler can use them for core placement decisions. Sits on top of (does not replace) Linux CFS for time-slicing.
+
+Machine Learning Approach
+7-layer feed-forward neural network (5 hidden layers), trained offline per program on full SPEC2006 runs.
+Input: last 15 context switches of counter data, simplified to 5 k-means clusters per counter (centroids unique per program). Input layer = 75 neurons, output = 5 neurons (predicted cluster for next context switch).
+Training takes minutes (one-time cost); prediction takes ~210μs — fast enough to predict ~10 applications within a single ~2,500μs time quantum.
+
+Scheduling Policy
+Applications predicted to be in the same phase type (e.g., both memory-intensive) are spread across different cores; applications in different phases can share a core. Memory-intensive programs are distributed as evenly as possible. Migration thresholds prevent over-migration from malicious or heavy loads.
+
+Key Results
+Interference cost of poor scheduling: up to 25% slowdown from memory contention and 35% from FP interference (synthetic benchmarks); 10–20% for SPEC2006 benchmarks.
+Memory phase prediction: 30% error rate vs. 50% for a last-value predictor (significant improvement at phase transitions — the moments that matter most for security).
+FP phase prediction: ~22% error rate for both predictors, but this parity is due to most benchmarks having trivially predictable FP patterns (either zero FP or very long stable phases).
+
+Key Distinction from Prior Work
+First work to combine predictive (not reactive) ML-based phase detection with security-aware scheduling integrated into the Linux CFS scheduler. Prior approaches either used simple last-value predictors, required offline analysis too complex for online use, or focused purely on performance without security considerations. Unlike code-based phase detection (e.g., BBVs), HPCs require no binary instrumentation and work transparently at runtime."
+11,Multilevel Phase Analysis,"Weihua Zhang, Jiaxin Li, Yi Li, Haibo Chen",ACM Transactions on Embedded Computing Systems (TECS),,https://dl.acm.org/doi/epdf/10.1145/2629594,
+11,Program phase detection and exploitation,"Chen Ding, S. Dwarkadas, M.C. Huang, Kai Shen, J.B. Carter",IEEE International Parallel & Distributed Processing Symposium,2006,https://ieeexplore.ieee.org/document/1639570,
+12,"SimPoint 3.0: Faster and More Flexible
+Program Phase Analysis","Greg Hamerly, Erez Perelman, Jeremy Lau, Brad Calder",Journal of Instruction-Level Parallelism ,2005,https://cseweb.ucsd.edu/~calder/papers/JILP-05-SimPoint3.pdf,

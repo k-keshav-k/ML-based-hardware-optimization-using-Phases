@@ -1,0 +1,9 @@
+{
+  "interval_ms": 10,
+  "synthetic_duration_ms": 1500,
+  "synthetic_phase_ms": 150,
+  "threads": [1, 2, 4, 8],
+  "repetitions": 3,
+  "correlation_thresholds": [0.7, 0.8, 0.9],
+  "winsor_limits": [0.01, 0.99]
+}

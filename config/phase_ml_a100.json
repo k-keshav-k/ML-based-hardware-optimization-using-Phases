@@ -1,0 +1,27 @@
+{
+  "dataset": {
+    "sequence_length": 32,
+    "stride": 1,
+    "prediction_horizon": 20
+  },
+  "baselines": {
+    "logistic_epochs": 240,
+    "include_linear_svm": true
+  },
+  "transformer": {
+    "epochs": 20,
+    "batch_size": 1024,
+    "learning_rate": 0.0003,
+    "weight_decay": 0.01,
+    "hidden_dim": 128,
+    "num_layers": 4,
+    "num_heads": 4,
+    "ff_dim": 256,
+    "dropout": 0.1,
+    "amp_dtype": "bf16"
+  },
+  "student": {
+    "decision_tree_max_depth": 4,
+    "decision_tree_min_samples_leaf": 16
+  }
+}
