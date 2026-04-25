@@ -35,6 +35,8 @@ fi
 
 uv sync --extra phase-ml
 
+uv run python -c \"import csv, os; from collections import Counter; from pathlib import Path; from phase_ml.config import load_config; c=load_config(os.environ['PHASE_ML_CONFIG']); p=Path(c['dataset']['input_csv']); print('dataset.input_csv=' + str(p)); print('dataset.output_dir=' + str(c['dataset']['output_dir'])); print('input_exists=' + str(p.exists())); f=p.open(newline=''); counts=Counter(row.get('suite', '<missing>') for row in csv.DictReader(f)); f.close(); print('input_rows=' + str(sum(counts.values()))); print('suite_counts=' + repr(counts.most_common(20))); raise SystemExit('Input CSV has no suite=parsec rows.') if counts.get('parsec', 0) == 0 else None\"
+
 uv run -m phase_ml.build_dataset \
   --config \${PHASE_ML_CONFIG}
 
