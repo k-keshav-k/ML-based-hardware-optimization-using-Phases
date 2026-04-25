@@ -1,0 +1,18 @@
+{
+  "status": "not_yet_run",
+  "purpose": "Compare timing-independent and timing-derived features across CPU frequency settings.",
+  "requires": [
+    "cpufreq control permission",
+    "stable thermal conditions",
+    "at least two fixed frequency settings",
+    "repeated PARSEC runs"
+  ],
+  "metrics": [
+    "centroid_drift",
+    "phase_assignment_consistency",
+    "js_distance_between_phase_distributions",
+    "cross_frequency_phase_change_f1",
+    "timing_derived_vs_timing_independent_stability"
+  ]
+}
+

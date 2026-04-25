@@ -1,0 +1,20 @@
+{
+  "analysis_dir": "results/a_star_analysis",
+  "dataset_dir": "results/phase_ml_core_uncore_large/dataset",
+  "dvfs_analysis_dir": "results/dvfs_stress_core_uncore_large/analysis",
+  "eval_dir": "results/phase_ml_core_uncore_large/evaluation",
+  "figure_dir": "figures",
+  "label_dir": "results/phase_ml_core_uncore_large/labels",
+  "name": "core_uncore_large",
+  "online_dir": "results/online_coscheduling_core_uncore_large",
+  "online_experiments": {
+    "burst_coscheduling": "not_yet_run",
+    "dvfs_stress": "not_yet_run",
+    "prefetch_control": "not_yet_run",
+    "resctrl_cat": "not_yet_run_unless_sys_fs_resctrl_exists"
+  },
+  "paper_dir": "paper",
+  "processed_dir": "results/processed_phase_ml_core_uncore_large",
+  "run_root": "results/phase_ml_core_uncore_large",
+  "source_report_dir": "results/phase_ml_paper_core_uncore_large"
+}

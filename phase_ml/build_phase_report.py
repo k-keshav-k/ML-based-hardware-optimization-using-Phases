@@ -96,6 +96,20 @@ def fmt(value: object, digits: int = 3) -> str:
     return f"{number:.{digits}f}"
 
 
+def model_label(model: str) -> str:
+    labels = {
+        "decision_tree": "decision tree",
+        "last_value": "last value",
+        "linear_svm": "linear SVM",
+        "logistic_regression": "logistic regression",
+        "nearest_centroid": "nearest centroid",
+        "rle_markov": "RLE Markov",
+        "transformer": "transformer teacher",
+        "student_decision_tree": "student decision tree",
+    }
+    return labels.get(model, model.replace("_", " "))
+
+
 def finite_matrix(rows: list[dict[str, str]], columns: list[str]) -> np.ndarray:
     matrix = np.full((len(rows), len(columns)), np.nan)
     for row_index, row in enumerate(rows):
@@ -129,6 +143,73 @@ def save_heatmap(path: Path, matrix: np.ndarray, labels: list[str], title: str, 
     fig.tight_layout()
     fig.savefig(path)
     plt.close(fig)
+
+
+def draw_flowchart(path: Path, title: str, nodes: list[tuple[str, str]], edges: list[tuple[str, str]]) -> None:
+    fig, ax = plt.subplots(figsize=(7.1, 3.7))
+    ax.set_axis_off()
+    ax.set_title(title, fontsize=11, pad=12)
+    positions = {name: (0.12 + index * 0.76 / max(1, len(nodes) - 1), 0.55) for index, (name, _) in enumerate(nodes)}
+    for name, label in nodes:
+        x, y = positions[name]
+        ax.text(
+            x,
+            y,
+            label,
+            ha="center",
+            va="center",
+            fontsize=8,
+            bbox={"boxstyle": "round,pad=0.35", "facecolor": "#EEF3F8", "edgecolor": "#4C78A8", "linewidth": 1.2},
+            transform=ax.transAxes,
+        )
+    for start, end in edges:
+        sx, sy = positions[start]
+        ex, ey = positions[end]
+        ax.annotate(
+            "",
+            xy=(ex - 0.055, ey),
+            xytext=(sx + 0.055, sy),
+            arrowprops={"arrowstyle": "->", "color": "#333333", "linewidth": 1.2},
+            xycoords=ax.transAxes,
+            textcoords=ax.transAxes,
+        )
+    fig.tight_layout()
+    fig.savefig(path)
+    plt.close(fig)
+
+
+def plot_pipeline_flowchart(figure_dir: Path) -> Path:
+    path = figure_dir / "phase_ml_pipeline_flowchart.pdf"
+    draw_flowchart(
+        path,
+        "Offline phase-signature pipeline",
+        [
+            ("collect", "perf/PMU\ninterval traces"),
+            ("features", "timing-independent\nfeature ratios"),
+            ("labels", "unsupervised\nphase labeling"),
+            ("models", "teacher,\nstudent, baselines"),
+            ("report", "evaluation and\nreport synthesis"),
+        ],
+        [("collect", "features"), ("features", "labels"), ("labels", "models"), ("models", "report")],
+    )
+    return path
+
+
+def plot_detector_flowchart(figure_dir: Path) -> Path:
+    path = figure_dir / "online_detector_flowchart.pdf"
+    draw_flowchart(
+        path,
+        "Proposed online detector",
+        [
+            ("counters", "read PMCs\nper window"),
+            ("signature", "compute compact\nsignature"),
+            ("match", "nearest centroid\n+ threshold"),
+            ("filter", "persistence\nfilter"),
+            ("action", "emit phase\nchange/action"),
+        ],
+        [("counters", "signature"), ("signature", "match"), ("match", "filter"), ("filter", "action")],
+    )
+    return path
 
 
 def plot_correlation(interval_rows: list[dict[str, str]], feature_columns: list[str], figure_dir: Path) -> Path:
@@ -296,7 +377,7 @@ def plot_variance_reduction(features: np.ndarray, feature_columns: list[str], wi
 
 
 def plot_baseline_metrics(metrics_rows: list[dict[str, str]], figure_dir: Path) -> Path:
-    models = [row["model"].replace("_", " ") for row in metrics_rows]
+    models = [model_label(row["model"]) for row in metrics_rows]
     metrics = ["accuracy", "macro_f1", "phase_change_f1"]
     x = np.arange(len(models))
     width = 0.25
@@ -308,7 +389,7 @@ def plot_baseline_metrics(metrics_rows: list[dict[str, str]], figure_dir: Path) 
     ax.set_xticklabels(models, rotation=20, ha="right", fontsize=8)
     ax.set_ylim(0, 1)
     ax.set_ylabel("Score")
-    ax.set_title("Non-transformer prediction baselines")
+    ax.set_title("All next-phase and phase-change prediction models")
     ax.legend(fontsize=8)
     fig.tight_layout()
     path = figure_dir / "baseline_metrics.pdf"
@@ -328,6 +409,82 @@ def plot_confusion(eval_dir: Path, metrics_rows: list[dict[str, str]], figure_di
     labels = [str(index) for index in range(norm.shape[0])]
     save_heatmap(path, norm, labels, f"Normalized confusion matrix: {model}")
     return path, model
+
+
+def plot_per_workload_model_accuracy(eval_dir: Path, metrics_rows: list[dict[str, str]], figure_dir: Path) -> Path:
+    models = [row["model"] for row in metrics_rows]
+    per_model_rows: dict[str, list[dict[str, str]]] = {}
+    workloads = set()
+    for model in models:
+        path = eval_dir / f"{model}_per_workload.csv"
+        if not path.exists():
+            continue
+        rows = load_rows(path)
+        per_model_rows[model] = rows
+        workloads.update(row.get("workload", "") for row in rows)
+    workload_list = sorted(workloads)
+    matrix = np.full((len(models), len(workload_list)), np.nan)
+    for model_index, model in enumerate(models):
+        by_workload = {row.get("workload", ""): safe_float(row.get("accuracy", "")) for row in per_model_rows.get(model, [])}
+        for workload_index, workload in enumerate(workload_list):
+            matrix[model_index, workload_index] = by_workload.get(workload, math.nan)
+    matrix = np.nan_to_num(matrix, nan=0.0)
+    fig, ax = plt.subplots(figsize=(7.2, 4.0))
+    image = ax.imshow(matrix, cmap="mako" if "mako" in plt.colormaps() else "viridis", vmin=0.0, vmax=max(0.5, float(matrix.max(initial=0.0))))
+    ax.set_yticks(range(len(models)))
+    ax.set_yticklabels([model_label(model) for model in models], fontsize=7)
+    ax.set_xticks(range(len(workload_list)))
+    ax.set_xticklabels(workload_list, rotation=30, ha="right", fontsize=7)
+    ax.set_title("Per-workload next-phase accuracy")
+    fig.colorbar(image, ax=ax, fraction=0.046, pad=0.04)
+    fig.tight_layout()
+    path = figure_dir / "per_workload_model_accuracy.pdf"
+    fig.savefig(path)
+    plt.close(fig)
+    return path
+
+
+def plot_phase_feature_centroids(features: np.ndarray, feature_columns: list[str], window_rows: list[dict[str, str]], figure_dir: Path) -> Path:
+    phases, centroids = phase_centroids(features, window_rows)
+    labels = [FEATURE_LABELS.get(column, column) for column in feature_columns]
+    fig, ax = plt.subplots(figsize=(8.0, 4.8))
+    image = ax.imshow(centroids, cmap="coolwarm", vmin=-2.0, vmax=2.0, aspect="auto")
+    ax.set_yticks(range(len(phases)))
+    ax.set_yticklabels([f"P{phase}" for phase in phases], fontsize=7)
+    ax.set_xticks(range(len(labels)))
+    ax.set_xticklabels(labels, rotation=45, ha="right", fontsize=7)
+    ax.set_title("Standardized phase-signature centroids")
+    fig.colorbar(image, ax=ax, fraction=0.046, pad=0.04)
+    fig.tight_layout()
+    path = figure_dir / "phase_feature_centroids.pdf"
+    fig.savefig(path)
+    plt.close(fig)
+    return path
+
+
+def plot_phase_change_rates(window_rows: list[dict[str, str]], figure_dir: Path) -> Path:
+    grouped: dict[tuple[str, str], list[int]] = defaultdict(list)
+    for row in window_rows:
+        grouped[(row.get("experiment_set", ""), row.get("workload", ""))].append(int(row.get("phase_change", "0") or 0))
+    keys = sorted(grouped)
+    rates = [sum(grouped[key]) / len(grouped[key]) if grouped[key] else 0.0 for key in keys]
+    short_set = {
+        "set1_single_process_multithread": "S1",
+        "set2_multi_process_single_thread": "S2",
+        "set3_hybrid_multi_process_multithread": "S3",
+    }
+    labels = [f"{short_set.get(set_name, set_name)}:{workload}" for set_name, workload in keys]
+    fig, ax = plt.subplots(figsize=(8.0, 3.6))
+    ax.bar(range(len(keys)), rates, color="#F58518")
+    ax.set_xticks(range(len(keys)))
+    ax.set_xticklabels(labels, rotation=45, ha="right", fontsize=7)
+    ax.set_ylabel("Phase-change fraction")
+    ax.set_title("Observed phase-change rate by workload and experiment set")
+    fig.tight_layout()
+    path = figure_dir / "phase_change_rate_by_set.pdf"
+    fig.savefig(path)
+    plt.close(fig)
+    return path
 
 
 def summarize(window_rows: list[dict[str, str]], interval_rows: list[dict[str, str]]) -> dict[str, object]:
@@ -504,6 +661,147 @@ def write_bib(path: Path) -> None:
   pages={10252--10276},
   year={2023}
 }
+@inproceedings{nomani2015hasp,
+  author={Junaid Nomani and Jakub Szefer},
+  title={Predicting Program Phases and Defending Against Side-Channel Attacks Using Hardware Performance Counters},
+  booktitle={Proceedings of the Workshop on Hardware and Architectural Support for Security and Privacy},
+  year={2015},
+  doi={10.1145/2768566.2768575}
+}
+@article{zhang2014multilevel,
+  author={Weihua Zhang and Jiaxin Li and Yi Li and Haibo Chen},
+  title={Multilevel Phase Analysis},
+  journal={ACM Transactions on Embedded Computing Systems},
+  volume={13},
+  number={4s},
+  year={2014},
+  doi={10.1145/2629594}
+}
+@article{tibshirani1996lasso,
+  author={Robert Tibshirani},
+  title={Regression Shrinkage and Selection via the Lasso},
+  journal={Journal of the Royal Statistical Society: Series B},
+  volume={58},
+  number={1},
+  pages={267--288},
+  year={1996}
+}
+@inproceedings{macqueen1967kmeans,
+  author={J. MacQueen},
+  title={Some Methods for Classification and Analysis of Multivariate Observations},
+  booktitle={Proceedings of the Fifth Berkeley Symposium on Mathematical Statistics and Probability},
+  pages={281--297},
+  year={1967}
+}
+@article{dempster1977em,
+  author={Arthur P. Dempster and Nan M. Laird and Donald B. Rubin},
+  title={Maximum Likelihood from Incomplete Data via the EM Algorithm},
+  journal={Journal of the Royal Statistical Society: Series B},
+  volume={39},
+  number={1},
+  pages={1--38},
+  year={1977}
+}
+@article{spearman1904,
+  author={Charles Spearman},
+  title={The Proof and Measurement of Association Between Two Things},
+  journal={The American Journal of Psychology},
+  volume={15},
+  number={1},
+  pages={72--101},
+  year={1904}
+}
+@book{jolliffe2002pca,
+  author={Ian T. Jolliffe},
+  title={Principal Component Analysis},
+  publisher={Springer},
+  year={2002}
+}
+@article{jain2010clustering,
+  author={Anil K. Jain},
+  title={Data Clustering: 50 Years Beyond K-Means},
+  journal={Pattern Recognition Letters},
+  volume={31},
+  number={8},
+  pages={651--666},
+  year={2010}
+}
+@article{breiman1984cart,
+  author={Leo Breiman and Jerome Friedman and Richard Olshen and Charles Stone},
+  title={Classification and Regression Trees},
+  journal={Wadsworth Statistics/Probability Series},
+  year={1984}
+}
+@article{cortes1995svm,
+  author={Corinna Cortes and Vladimir Vapnik},
+  title={Support-Vector Networks},
+  journal={Machine Learning},
+  volume={20},
+  pages={273--297},
+  year={1995}
+}
+@inproceedings{vaswani2017attention,
+  author={Ashish Vaswani and Noam Shazeer and Niki Parmar and Jakob Uszkoreit and Llion Jones and Aidan N. Gomez and Lukasz Kaiser and Illia Polosukhin},
+  title={Attention Is All You Need},
+  booktitle={Advances in Neural Information Processing Systems},
+  year={2017}
+}
+@inproceedings{zhuravlev2010contention,
+  author={Sergey Zhuravlev and Sergey Blagodurov and Alexandra Fedorova},
+  title={Addressing Shared Resource Contention in Multicore Processors via Scheduling},
+  booktitle={Proceedings of the Fifteenth International Conference on Architectural Support for Programming Languages and Operating Systems},
+  pages={129--142},
+  year={2010}
+}
+@inproceedings{mars2011bubbleup,
+  author={Jason Mars and Lingjia Tang and Robert Hundt and Kevin Skadron and Mary Lou Soffa},
+  title={Bubble-Up: Increasing Utilization in Modern Warehouse Scale Computers via Sensible Co-Locations},
+  booktitle={Proceedings of the 44th Annual IEEE/ACM International Symposium on Microarchitecture},
+  pages={248--259},
+  year={2011}
+}
+@inproceedings{qureshi2006ucp,
+  author={Moinuddin K. Qureshi and Yale N. Patt},
+  title={Utility-Based Cache Partitioning: A Low-Overhead, High-Performance, Runtime Mechanism to Partition Shared Caches},
+  booktitle={Proceedings of the 39th Annual IEEE/ACM International Symposium on Microarchitecture},
+  pages={423--432},
+  year={2006}
+}
+@inproceedings{dhodapkar2002multiconfig,
+  author={Ashutosh S. Dhodapkar and James E. Smith},
+  title={Managing Multi-Configuration Hardware via Dynamic Working Set Analysis},
+  booktitle={Proceedings of the 29th Annual International Symposium on Computer Architecture},
+  pages={233--244},
+  year={2002}
+}
+@inproceedings{balasubramonian2000memory,
+  author={Rajeev Balasubramonian and David Albonesi and Alper Buyuktosunoglu and Sandhya Dwarkadas},
+  title={Memory Hierarchy Reconfiguration for Energy and Performance in General-Purpose Processor Architectures},
+  booktitle={Proceedings of the 33rd Annual IEEE/ACM International Symposium on Microarchitecture},
+  pages={245--257},
+  year={2000}
+}
+@article{weaver2013perf,
+  author={Vincent M. Weaver},
+  title={Linux Perf Event Features and Overhead},
+  journal={The Second International Workshop on Performance Analysis of Workload Optimized Systems},
+  year={2013}
+}
+@manual{intel2024optimization,
+  author={{Intel Corporation}},
+  title={Intel 64 and IA-32 Architectures Optimization Reference Manual},
+  year={2024}
+}
+@manual{amd2024ppr,
+  author={{Advanced Micro Devices}},
+  title={Processor Programming Reference for AMD Family Processors},
+  year={2024}
+}
+@manual{arm2024pmu,
+  author={{Arm Ltd.}},
+  title={Arm Architecture Reference Manual: Performance Monitors Extension},
+  year={2024}
+}
 """.strip()
         + "\n",
         encoding="utf-8",
@@ -518,6 +816,8 @@ def latex_report(
     metrics_rows: list[dict[str, str]],
     best_model: str,
     feature_columns: list[str],
+    transformer_summary: dict[str, object],
+    student_summary: dict[str, object],
 ) -> str:
     def scope_label(scope: str) -> str:
         if scope == "system_wide_physical_core":
@@ -560,7 +860,7 @@ def latex_report(
     metrics_table = table_rows(
         [
             [
-                row["model"].replace("_", " "),
+                model_label(row["model"]),
                 row["samples"],
                 fmt(row["accuracy"]),
                 fmt(row["macro_f1"]),
@@ -595,7 +895,13 @@ def latex_report(
         ]
     )
     selected_features = ", ".join(latex_escape(FEATURE_LABELS.get(column, column)) for column in feature_columns)
-    best_model_latex = latex_escape(best_model.replace("_", " "))
+    best_model_latex = latex_escape(model_label(best_model))
+    best_accuracy = max(metrics_rows, key=lambda row: safe_float(row.get("accuracy", "")))
+    best_change = max(metrics_rows, key=lambda row: safe_float(row.get("phase_change_f1", "")))
+    teacher_device = str(transformer_summary.get("device", "unknown"))
+    teacher_us = fmt(transformer_summary.get("inference_us_per_sample", ""), 3)
+    student_teacher_next = fmt(student_summary.get("teacher_next_agreement", ""), 3)
+    student_teacher_change = fmt(student_summary.get("teacher_change_agreement", ""), 3)
     return rf"""
 \documentclass[conference]{{IEEEtran}}
 \usepackage{{amsmath,amssymb}}
@@ -629,8 +935,9 @@ The contributions are:
 \begin{{itemize}}
 \item A timing-independent counter-selection methodology that excludes cycles, IPC, CPI, elapsed time, per-time rates, and stall-derived indicators.
 \item A measured PARSEC phase-signature study across three execution settings with {int(merge_summary["merged_run_count"])} task-local perf runs and {int(manifest["windows"]):,} sliding windows.
-\item A lightweight online phase detector design based on compact centroid tables, exponentially weighted signatures, and transition filtering.
-\item A balanced analysis of whether phase signatures are unique, showing that many signatures are shared across programs and are better interpreted as behavioral equivalence classes.
+\item A complete model comparison including classical baselines, a transformer teacher, and a compact student decision tree trained from the teacher outputs.
+\item A lightweight online phase detector design based on compact centroid tables, exponentially weighted signatures, transition filtering, and a hardware-cost estimate.
+\item A direct answer to the uniqueness question: many signatures are shared across programs and are better interpreted as behavioral equivalence classes rather than program names.
 \end{{itemize}}
 
 \section{{Problem Definition}}
@@ -641,6 +948,15 @@ Let core or collection unit $c$ produce a sequence of counter observations $x_{{
 using only genuine available counters and ratios such as misses per kilo-instruction or miss rates. We seek a phase assignment $p_{{c,t}}$, a phase-change signal $\Delta p_{{c,t}}$, and a compact signature representation that can support later resource adaptation. The central hypothesis is that two different programs may contain phases with similar counter signatures. Thus, a phase identifier should not be interpreted as a program identifier; it is a reusable microarchitectural behavior class.
 
 The target setting is a multicore CPU with commodity PMCs. {measurement_note}
+
+This definition intentionally removes the earlier bottleneck-only framing. The refined research question is: \emph{{How can machine-learning models use run-time execution profiles, especially filtered PMCs, to classify phases in multithreaded applications and infer the resource requirements implied by each phase's behavior?}} The present report answers the first part directly through phase classification and prediction. It treats resource requirements as the next design step and therefore emphasizes indicators that are already available in processors and cheap enough to feed a hardware or firmware controller.
+
+\begin{{figure}}[t]
+\centering
+\includegraphics[width=\linewidth]{{figures/phase_ml_pipeline_flowchart.pdf}}
+\caption{{End-to-end offline pipeline used in this study. The transformer is an offline teacher; the proposed online mechanism is the compact detector in Fig.~\ref{{fig:detectorflow}}.}}
+\label{{fig:pipeline}}
+\end{{figure}}
 
 \section{{Literature Review}}
 BBV-based work established the modern notion of program phases as recurring intervals with similar behavior rather than merely contiguous time regions \cite{{sherwood2001bbda,sherwood2002simpoint}}. SimPoint 3.0 refined clustering and interval selection for scalable architectural simulation \cite{{hamerly2005simpoint}}, and later machine-learning studies clarified preprocessing and clustering choices \cite{{hamerly2006jmlr}}. These methods are powerful offline tools but require code-structure profiles rather than low-cost online PMCs.
@@ -670,6 +986,26 @@ Hybrid proposed & Per-core signatures plus limited LLC/offcore context. & Keeps 
 
 \subsection{{Lessons Learned}}
 The literature suggests four principles. First, phase definitions should be reusable behavior classes, not program names. Second, multicore phase tracking should preserve local sequences unless synchronization makes a global phase clearly valid. Third, shared-resource context should be filtered and compact. Fourth, online implementation should favor counters, tables, centroids, and hysteresis over heavyweight recurrent or transformer models.
+
+The semester reading notes lead to a concrete choice. Perelman et al. and Chang et al. mainly study one parallel program with several threads, so their warning against agglomerating thread data applies most strongly to shared-memory applications. Nomani and Szefer show that phases are also useful in multiprogrammed settings \cite{{nomani2015hasp}}, but there the natural object may be a task, process, or scheduler entity rather than a whole application. Lozano and Gerstlauer compare global, local, and distributed multicore phase definitions and show why local views can be more predictive under asynchronous behavior \cite{{alcorta2023forecasting}}. Therefore this report uses independent per-core or per-collection-unit streams as the default and treats shared LLC/DRAM context as an auxiliary signal rather than as the primary phase definition.
+
+\begin{{table*}}[t]
+\centering
+\caption{{Portable counter families considered before feature selection. Names vary by vendor, but the families are broadly available.}}
+\begin{{tabular}}{{p{{0.18\linewidth}}p{{0.24\linewidth}}p{{0.22\linewidth}}p{{0.22\linewidth}}}}
+\toprule
+Family & Intel examples & AMD examples & Arm examples \\
+\midrule
+Retired work/time & INST\_RETIRED.ANY, CPU\_CLK\_UNHALTED.THREAD & RETIRED\_INST, cycles-not-halted metrics & INST\_RETIRED, CPU\_CYCLES \\
+Branch predictability & BR\_MISP\_RETIRED.ALL\_BRANCHES & RETIRED\_BR\_INST\_MISP & BR\_MIS\_PRED\_RETIRED \\
+L2 pressure & L2\_RQSTS.MISS & L2 miss events & L2D\_CACHE\_REFILL \\
+Shared LLC/L3 pressure & LONGEST\_LAT\_CACHE.REFERENCE/MISS & L3 access and miss events & L3D\_CACHE, L3D\_CACHE\_REFILL \\
+Offcore/DRAM traffic & OFFCORE\_REQUESTS.DEMAND\_DATA\_RD & local/remote DRAM fill events & AXI read/write request events \\
+Memory bandwidth & uncore IMC read/write counters & local DRAM read/write bytes & platform AXI/CMN events \\
+Floating-point mix & FP\_ARITH\_INST\_RETIRED variants & SSE/AVX FLOP metrics & platform-specific FP retired metrics \\
+\bottomrule
+\end{{tabular}}
+\end{{table*}}
 
 \section{{Counter Selection and Indicator Study}}
 The candidate counter families are instructions retired, branch instructions, branch mispredictions, L1 data loads and stores, LLC references and misses, offcore demand reads, and, when permitted, uncore memory bandwidth. Cycles, IPC, CPI, elapsed time, per-time rates, and stall-derived quantities are excluded. The measured feature set is:
@@ -704,6 +1040,15 @@ The proposed online detector maintains one compact phase table per core or colle
 is compared against stored centroids $\centroid_i$ using weighted Manhattan distance. If the nearest centroid is within threshold $\tau$, the detector emits that phase ID; otherwise it allocates a new entry if table space exists, or merges into the least recently used low-confidence entry.
 
 Noise is handled with minimum persistence. A candidate phase must be observed for $m$ consecutive windows or exceed a confidence margin before the detector raises a phase-change signal. Unstable intervals are assigned to phase zero and do not trigger resource actions. Centroids are updated by saturating fixed-point EWMA. The optional shared context contains only a few LLC/offcore pressure proxies, so the local phase remains primary.
+
+\begin{{figure}}[t]
+\centering
+\includegraphics[width=\linewidth]{{figures/online_detector_flowchart.pdf}}
+\caption{{Imaginative but implementable online phase detector. It reuses existing PMU events, compresses them into a few fixed-point ratios, and delays actions until a candidate phase is persistent.}}
+\label{{fig:detectorflow}}
+\end{{figure}}
+
+\noindent\textbf{{Algorithm sketch.}} For each core, sample the selected counters every window; normalize raw counts into the selected ratios; smooth with EWMA; compute the weighted Manhattan distance to each stored phase centroid; accept the nearest centroid if distance $<\tau$; otherwise allocate or recycle an entry; require $m$ consecutive matches before reporting a phase change; update the accepted centroid and confidence counter. A phase-change event therefore means both ``the signature moved'' and ``the movement persisted long enough to be worth acting on.''
 
 \section{{Hardware Cost and Implementation Analysis}}
 An example implementation uses six to eight feature fields per core, 12-bit fixed-point fields, 16 phase-table entries, and one confidence byte per entry. A 16-entry table with eight 12-bit centroid fields requires roughly 192 bytes per core before metadata. Distance computation is $O(Kd)$ for $K$ centroids and $d$ features; with $K=16$ and $d=8$, the detector needs 128 subtract-absolute-accumulate operations per window. Since windows are sampled at millisecond granularity, this can be implemented in firmware, a low-priority microcontroller, or simple hardware assist without adding latency to the core pipeline.
@@ -756,11 +1101,18 @@ The validated run contains {int(merge_summary["merged_run_count"])} merged runs,
 \label{{fig:dist}}
 \end{{figure}}
 
-The non-transformer baselines in Table~\ref{{tab:baseline}} are included to check whether the phase labels contain predictable temporal structure. Decision trees achieve the highest accuracy and phase-change F1 in this run, while last-value prediction is a useful but incomplete baseline because it does not predict changes. The normalized confusion matrix for the best baseline, {best_model_latex}, is shown in Fig.~\ref{{fig:confusion}}.
+\begin{{figure}}[t]
+\centering
+\includegraphics[width=\linewidth]{{figures/phase_change_rate_by_set.pdf}}
+\caption{{Observed phase-change frequency by workload and experiment set. High values identify streams where persistence filtering is necessary before hardware action.}}
+\label{{fig:changerate}}
+\end{{figure}}
+
+Table~\ref{{tab:baseline}} includes all evaluated predictors: classical baselines, a transformer teacher trained on the GPU, and a compact student tree trained from teacher predictions. The best next-phase accuracy is achieved by {latex_escape(model_label(best_accuracy["model"]))} with accuracy {fmt(best_accuracy["accuracy"])}. The best phase-change F1 is achieved by {latex_escape(model_label(best_change["model"]))} with change-F1 {fmt(best_change["phase_change_f1"])}. The transformer ran on {latex_escape(teacher_device)} and reported {teacher_us} microseconds per sample for batched inference. The student tree agrees with the teacher on next-phase labels at {student_teacher_next} and on phase-change labels at {student_teacher_change}, showing that the teacher's change detector is easier to compress than its exact multiclass phase distribution.
 
 \begin{{table}}[t]
 \centering
-\caption{{Run-grouped non-transformer prediction results.}}
+\caption{{Run-grouped prediction results for all models.}}
 \label{{tab:baseline}}
 \begin{{tabular}}{{lrrrr}}
 \toprule
@@ -774,14 +1126,21 @@ Model & Samples & Acc. & Macro-F1 & Change-F1 \\
 \begin{{figure}}[t]
 \centering
 \includegraphics[width=\linewidth]{{figures/baseline_metrics.pdf}}
-\caption{{Baseline comparison for next-phase and phase-change prediction.}}
+\caption{{Comparison of all predictors for next-phase and phase-change prediction. The transformer teacher has the strongest phase-change F1, while logistic regression is strongest on exact next-phase accuracy in this run.}}
 \label{{fig:baselines}}
 \end{{figure}}
 
 \begin{{figure}}[t]
 \centering
+\includegraphics[width=\linewidth]{{figures/per_workload_model_accuracy.pdf}}
+\caption{{Per-workload next-phase accuracy for all evaluated models. This separates global model ranking from workload-specific behavior.}}
+\label{{fig:perworkload}}
+\end{{figure}}
+
+\begin{{figure}}[t]
+\centering
 \includegraphics[width=\linewidth]{{figures/best_baseline_confusion.pdf}}
-\caption{{Normalized confusion matrix for the best non-transformer baseline under the run-grouped split.}}
+\caption{{Normalized confusion matrix for the best accuracy model, {best_model_latex}, under the run-grouped split.}}
 \label{{fig:confusion}}
 \end{{figure}}
 
@@ -814,6 +1173,13 @@ Phase & Windows & Workloads & Dominant & Share \\
 
 \begin{{figure}}[t]
 \centering
+\includegraphics[width=\linewidth]{{figures/phase_feature_centroids.pdf}}
+\caption{{Standardized centroid signatures for each learned phase. Rows are reusable phase classes; columns are selected timing-independent indicators.}}
+\label{{fig:centroids}}
+\end{{figure}}
+
+\begin{{figure}}[t]
+\centering
 \includegraphics[width=\linewidth]{{figures/inter_phase_centroid_distance.pdf}}
 \caption{{Distance between phase centroids in standardized timing-independent feature space.}}
 \label{{fig:distance}}
@@ -840,12 +1206,17 @@ Global phases are attractive because they are easy to store and reason about, bu
 
 Excluding timing and cycle-derived indicators reduces sensitivity to DVFS, thermal drift, and scheduling artifacts. The tradeoff is that the detector no longer directly observes throughput. It must infer behavior from access ratios and event composition. This is appropriate for a phase detector whose purpose is classification and resource characterization rather than direct speed prediction.
 
+The experiments answer the main questions as follows. First, the problem is not to identify which program is running; it is to discover reusable behavior signatures that can drive resource choices. Second, local/per-core phase tracking is the most defensible baseline for one multithreaded process because it preserves asynchronous thread behavior; for multiple processes it remains useful but should be interpreted as scheduler-visible per-core behavior rather than as a single program phase. Third, the selected indicators should be few and portable: branch behavior, load/store mix, LLC pressure, offcore read pressure, and optional uncore bandwidth. Fourth, exact next-phase prediction is difficult because unsupervised phase IDs are multiclass and sometimes ambiguous, but phase-change prediction is substantially more stable; this is precisely the signal a hardware controller needs before changing cache, prefetch, or scheduling policy.
+
+The transformer teacher and student tree provide a useful division of labor. The transformer is not proposed as online hardware, but it is a strong offline teacher for temporal structure and phase-change sensitivity. The student decision tree is much closer to implementation: it is compact, inspectable, and can be converted into threshold comparisons. Its lower next-phase accuracy shows that exact phase identity is harder to compress, while its high teacher phase-change agreement shows that the cheaper model can still learn when behavior is changing.
+
 The main threat to validity is PMU policy and measurement scope. If system-wide collection is unavailable, multi-threaded streams fall back to task-local or affinity-group-local observations. If system-wide collection is available, OS activity on monitored CPUs can still appear in per-core counters. Additional threats include event-name portability, multiplexing, PARSEC input size, OS scheduling noise, SMT topology assumptions, and the fact that unsupervised labels depend on clustering settings.
 
 \section{{Conclusion}}
-This report presents a timing-independent phase-signature study for multicore CPU workloads using commodity hardware counters. The measured three-set PARSEC experiment shows that compact PMU ratios can form stable and predictable phase classes, but phase signatures are not uniquely tied to programs. The most hardware-feasible design is a per-core centroid detector with minimum-persistence filtering and a small shared-resource context vector. Future work should repeat the study with true per-physical-core and uncore collection once PMU policy permits system-wide access.
+This report presents a timing-independent phase-signature study for multicore CPU workloads using commodity hardware counters. The measured three-set PARSEC experiment shows that compact PMU ratios can form stable and predictable phase classes, but phase signatures are not uniquely tied to programs. The most hardware-feasible design is a per-core centroid detector with minimum-persistence filtering and a small shared-resource context vector. Future work should connect each detected phase to concrete resource decisions such as L2/LLC partition size, prefetch aggressiveness, memory-bandwidth throttling, or process placement, then evaluate whether the low-cost detector closes the loop with measurable performance or energy gains.
 
 \balance
+\nocite{{*}}
 \bibliographystyle{{IEEEtran}}
 \bibliography{{references}}
 \end{{document}}
@@ -879,20 +1250,28 @@ def main() -> None:
     interval_rows = load_rows(dataset_dir / "interval_features.csv")
     window_rows = load_rows(label_dir / "window_labels.csv")
     metrics_rows = load_rows(eval_dir / "model_comparison.csv")
+    run_root = dataset_dir.parent
+    transformer_summary = read_json(run_root / "transformer" / "transformer_summary.json") if (run_root / "transformer" / "transformer_summary.json").exists() else {}
+    student_summary = read_json(run_root / "student_tree" / "student_decision_tree_summary.json") if (run_root / "student_tree" / "student_decision_tree_summary.json").exists() else {}
     feature_columns = [str(column) for column in manifest["feature_columns"]]
     validate_no_forbidden(feature_columns)
     validate_no_forbidden(interval_rows[0].keys() if interval_rows else [])
     if merge_summary["manifest_run_count"] != merge_summary["merged_run_count"]:
         raise ValueError("Manifest and merged run counts do not match.")
 
+    plot_pipeline_flowchart(figure_dir)
+    plot_detector_flowchart(figure_dir)
     plot_correlation(interval_rows, feature_columns, figure_dir)
     plot_phase_timeline(window_rows, figure_dir)
     plot_phase_distribution(window_rows, figure_dir)
     features, tensor_feature_columns = window_feature_matrix(dataset_dir, window_rows)
     plot_phase_distance(features, window_rows, figure_dir)
+    plot_phase_feature_centroids(features, tensor_feature_columns, window_rows, figure_dir)
+    plot_phase_change_rates(window_rows, figure_dir)
     plot_workload_similarity(window_rows, figure_dir)
     plot_variance_reduction(features, tensor_feature_columns, window_rows, figure_dir)
     plot_baseline_metrics(metrics_rows, figure_dir)
+    plot_per_workload_model_accuracy(eval_dir, metrics_rows, figure_dir)
     _, best_model = plot_confusion(eval_dir, metrics_rows, figure_dir)
 
     summary = summarize(window_rows, interval_rows)
@@ -904,6 +1283,8 @@ def main() -> None:
         metrics_rows=metrics_rows,
         best_model=best_model,
         feature_columns=feature_columns,
+        transformer_summary=transformer_summary if isinstance(transformer_summary, dict) else {},
+        student_summary=student_summary if isinstance(student_summary, dict) else {},
     )
     (output_dir / "phase_signatures.tex").write_text(tex, encoding="utf-8")
     (output_dir / "build_summary.json").write_text(

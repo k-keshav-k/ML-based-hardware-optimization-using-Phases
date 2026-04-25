@@ -4,7 +4,7 @@ PROCESSED_DIR ?= results/processed
 PREPROCESS_DIR ?= $(PROCESSED_DIR)/preprocessed
 TABLES_DIR ?= results/tables
 
-.PHONY: synthetic setup-parsec detect discover collect-synth merge preprocess analyze report example all clean
+.PHONY: synthetic setup-parsec detect discover collect-synth merge preprocess analyze report paper online-cosched dvfs-stress test example all clean
 
 synthetic:
 	mkdir -p synthetic_workloads/bin
@@ -33,6 +33,18 @@ analyze:
 
 report:
 	$(PYTHON) scripts/build_report.py
+
+paper:
+	$(PYTHON) -m pipeline.run_all --config experiments/configs/core_uncore_large.json
+
+online-cosched:
+	bash scripts/online/run_burst_coscheduling.sh
+
+dvfs-stress:
+	bash scripts/online/run_dvfs_stress.sh
+
+test:
+	$(PYTHON) -m unittest discover -s tests -p 'test*.py'
 
 example: detect discover collect-synth merge preprocess analyze report
 
