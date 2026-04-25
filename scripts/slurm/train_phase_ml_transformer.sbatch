@@ -22,7 +22,7 @@ export PYTORCH_CUDA_ALLOC_CONF=\${PYTORCH_CUDA_ALLOC_CONF:-expandable_segments:T
 export UV_PROJECT_ENVIRONMENT=\${UV_PROJECT_ENVIRONMENT:-.venv}
 export PHASE_ML_CONFIG=\${PHASE_ML_CONFIG:-config/phase_ml_indep_a100.json}
 
-cd \${PROJECT_DIR:-/scratch/kk6081/res}
+cd \${PROJECT_DIR:-/scratch/kk6081/Phase-pipeline/ML-based-hardware-optimization-using-Phases}
 mkdir -p /scratch/kk6081/indep/phase_ml_core_uncore_large logs
 
 if ! command -v uv >/dev/null 2>&1; then
