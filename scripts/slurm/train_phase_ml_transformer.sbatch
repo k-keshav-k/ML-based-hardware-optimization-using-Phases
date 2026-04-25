@@ -22,6 +22,8 @@ export PYTORCH_CUDA_ALLOC_CONF=\${PYTORCH_CUDA_ALLOC_CONF:-expandable_segments:T
 export UV_LINK_MODE=\${UV_LINK_MODE:-copy}
 export UV_PROJECT_ENVIRONMENT=\${UV_PROJECT_ENVIRONMENT:-.venv}
 export PHASE_ML_CONFIG=\${PHASE_ML_CONFIG:-config/phase_ml_indep_a100.json}
+export SKIP_DATASET_BUILD=\${SKIP_DATASET_BUILD:-auto}
+export SKIP_LABELING=\${SKIP_LABELING:-auto}
 
 cd \${PROJECT_DIR:-/scratch/kk6081/Phase-pipeline/ML-based-hardware-optimization-using-Phases}
 mkdir -p /scratch/kk6081/indep/phase_ml_core_uncore_large logs
@@ -35,15 +37,24 @@ fi
 
 uv sync --extra phase-ml
 
-uv run python -c \"import csv, os; from collections import Counter; from pathlib import Path; from phase_ml.config import load_config; c=load_config(os.environ['PHASE_ML_CONFIG']); p=Path(c['dataset']['input_csv']); print('dataset.input_csv=' + str(p)); print('dataset.output_dir=' + str(c['dataset']['output_dir'])); print('input_exists=' + str(p.exists())); f=p.open(newline=''); counts=Counter(row.get('suite', '<missing>') for row in csv.DictReader(f)); f.close(); print('input_rows=' + str(sum(counts.values()))); print('suite_counts=' + repr(counts.most_common(20))); raise SystemExit('Input CSV has no suite=parsec rows.') if counts.get('parsec', 0) == 0 else None\"
+uv run python -c \"import os; from pathlib import Path; from phase_ml.config import load_config; c=load_config(os.environ['PHASE_ML_CONFIG']); print('dataset.input_csv=' + str(c['dataset']['input_csv'])); print('dataset.output_dir=' + str(c['dataset']['output_dir'])); print('label_dir=' + str(Path(c['dataset']['output_dir']).parent / 'labels'))\"
 
-uv run -m phase_ml.build_dataset \
-  --config \${PHASE_ML_CONFIG}
+if [[ \"\${SKIP_DATASET_BUILD}\" == \"1\" ]] || { [[ \"\${SKIP_DATASET_BUILD}\" == \"auto\" ]] && uv run python -c \"import os; from pathlib import Path; from phase_ml.config import load_config; d=Path(load_config(os.environ['PHASE_ML_CONFIG'])['dataset']['output_dir']); raise SystemExit(0 if all((d / name).exists() for name in ['feature_manifest.json', 'interval_features.csv', 'window_metadata.csv', 'window_tensors.npz']) else 1)\"; }; then
+  echo 'Using existing phase-ML dataset; skipping build_dataset.'
+else
+  uv run python -c \"import csv, os; from collections import Counter; from pathlib import Path; from phase_ml.config import load_config; c=load_config(os.environ['PHASE_ML_CONFIG']); p=Path(c['dataset']['input_csv']); print('input_exists=' + str(p.exists())); raise SystemExit('Input CSV is missing. Either restore merged_interval_dataset.csv or set SKIP_DATASET_BUILD=1 to reuse an existing dataset directory.') if not p.exists() else None; f=p.open(newline=''); counts=Counter(row.get('suite', '<missing>') for row in csv.DictReader(f)); f.close(); print('input_rows=' + str(sum(counts.values()))); print('suite_counts=' + repr(counts.most_common(20))); raise SystemExit('Input CSV has no suite=parsec rows.') if counts.get('parsec', 0) == 0 else None\"
+  uv run -m phase_ml.build_dataset \
+    --config \${PHASE_ML_CONFIG}
+fi
 
-uv run python -c \"import os; from pathlib import Path; from phase_ml.config import load_config; from hpc_phase_analysis.io_utils import read_json; c=load_config(os.environ['PHASE_ML_CONFIG']); p=Path(c['dataset']['output_dir']) / 'feature_manifest.json'; m=read_json(p); print('Dataset manifest:', m); raise SystemExit('Dataset build produced no PARSEC interval rows. Check dataset.input_csv and the suite column.') if int(m.get('interval_rows', 0)) == 0 else None; raise SystemExit('Dataset build produced no training windows. Reduce sequence_length/prediction_horizon or check run lengths.') if int(m.get('windows', 0)) == 0 else None\"
+uv run python -c \"import os; from pathlib import Path; from phase_ml.config import load_config; from hpc_phase_analysis.io_utils import read_json; c=load_config(os.environ['PHASE_ML_CONFIG']); p=Path(c['dataset']['output_dir']) / 'feature_manifest.json'; m=read_json(p); print('Dataset manifest:', m); raise SystemExit('Dataset has no PARSEC interval rows.') if int(m.get('interval_rows', 0)) == 0 else None; raise SystemExit('Dataset has no training windows.') if int(m.get('windows', 0)) == 0 else None\"
 
-uv run -m phase_ml.label_phases \
-  --config \${PHASE_ML_CONFIG}
+if [[ \"\${SKIP_LABELING}\" == \"1\" ]] || { [[ \"\${SKIP_LABELING}\" == \"auto\" ]] && uv run python -c \"import os; from pathlib import Path; from phase_ml.config import load_config; d=Path(load_config(os.environ['PHASE_ML_CONFIG'])['dataset']['output_dir']).parent / 'labels'; raise SystemExit(0 if all((d / name).exists() for name in ['label_model.json', 'interval_labels.csv', 'window_labels.csv']) else 1)\"; }; then
+  echo 'Using existing phase labels; skipping label_phases.'
+else
+  uv run -m phase_ml.label_phases \
+    --config \${PHASE_ML_CONFIG}
+fi
 
 uv run -m phase_ml.train_baselines \
   --config \${PHASE_ML_CONFIG} \
