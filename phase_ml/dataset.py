@@ -19,11 +19,15 @@ from .features import (
 
 
 def parsec_interval_rows(input_csv: Path) -> list[dict[str, str]]:
+    # Phase-ML only trains on PARSEC rows.
     rows = load_csv_rows(input_csv)
     return [row for row in rows if row.get("suite", "") == "parsec"]
 
 
 def build_interval_features(rows: list[dict[str, str]]) -> tuple[list[dict[str, object]], list[str]]:
+    # Two-pass build:
+    # 1) compute broad feature candidates
+    # 2) keep only populated columns and rebuild narrow rows
     sorted_rows = sorted(
         rows,
         key=lambda row: (
@@ -40,6 +44,7 @@ def build_interval_features(rows: list[dict[str, str]]) -> tuple[list[dict[str, 
 
 
 def group_interval_indices(rows: list[dict[str, object]]) -> dict[tuple[str, str, str], list[int]]:
+    # Keep windowing within each execution stream to avoid cross-run leakage.
     groups: dict[tuple[str, str, str], list[int]] = defaultdict(list)
     for index, row in enumerate(rows):
         key = (
@@ -60,6 +65,8 @@ def build_windows(
     stride: int,
     prediction_horizon: int,
 ) -> tuple[np.ndarray, list[dict[str, object]], np.ndarray, np.ndarray]:
+    # Sliding window builder:
+    # `sequence_length` decides current-context span, `prediction_horizon` decides target offset.
     if sequence_length <= 0:
         raise ValueError("sequence_length must be positive")
     if stride <= 0:
@@ -125,6 +132,7 @@ def build_dataset(
     stride: int,
     prediction_horizon: int,
 ) -> dict[str, object]:
+    # End-to-end dataset stage: parsec-filter -> feature build -> window build -> artifact write.
     output_dir = ensure_dir(output_dir)
     parsec_rows = parsec_interval_rows(input_csv)
     interval_rows, feature_columns = build_interval_features(parsec_rows)

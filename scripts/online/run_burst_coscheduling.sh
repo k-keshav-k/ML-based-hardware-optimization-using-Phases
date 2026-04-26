@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# Wrapper for live process-placement experiments on a machine that has
+# PARSEC and taskset available.
 if ! command -v taskset >/dev/null 2>&1; then
   echo "taskset is required for process-placement experiments." >&2
   exit 1

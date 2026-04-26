@@ -26,6 +26,8 @@ def load_window_dataset(dataset_dir: Path, label_dir: Path) -> tuple[np.ndarray,
 
 
 def aligned_arrays(x: np.ndarray, rows: list[dict[str, str]], medians: np.ndarray) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+    # window_id ties labels to tensor rows; this keeps downstream split logic
+    # consistent with window_labels.csv.
     used_indices = np.asarray([int(row["window_id"]) for row in rows], dtype=int)
     x_used = x[used_indices]
     flat = fill_nan_with_medians(x_used.reshape(x_used.shape[0], -1), np.tile(medians, x_used.shape[1]))
@@ -220,6 +222,7 @@ def train_baselines(dataset_dir: Path, label_dir: Path, output_dir: Path, config
         eval_mask = np.ones(split.shape[0], dtype=bool)
     results: dict[str, object] = {}
     models = {
+        # Predict "no transition" by copying the current phase id.
         "last_value": None,
         "nearest_centroid": NearestCentroid.fit(flat[train_mask], y[train_mask]),
         "decision_tree": DecisionTree(

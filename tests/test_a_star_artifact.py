@@ -1,3 +1,5 @@
+"""Tests for analysis-level detector, replay, and artifact validation helpers."""
+
 from __future__ import annotations
 
 import tempfile

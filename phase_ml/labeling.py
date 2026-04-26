@@ -28,6 +28,7 @@ def fit_predict_labels(
     split_by_run: dict[str, str],
     seed: int,
 ) -> tuple[np.ndarray, np.ndarray, dict[str, object]]:
+    # Fit labeling model on train rows only, then predict labels for all intervals.
     matrix = matrix_from_rows(rows, feature_columns)
     train_indices = np.asarray([index for index, row in enumerate(rows) if split_by_run.get(row.get("run_id", ""), "train") == "train"], dtype=int)
     if train_indices.size == 0:
@@ -51,6 +52,7 @@ def fit_predict_labels(
     k_max = int(config.get("k_max", 12))
     max_iter = int(config.get("max_iter", 80))
     if method == "2kmeans":
+        # Two-level k-means path: first on rows, then on segment centroids.
         first = choose_kmeans(train_matrix, k_min, k_max, seed, max_iter)
         raw_train = first.predict(train_matrix)
         segment_vectors = []
@@ -65,6 +67,7 @@ def fit_predict_labels(
         raw_labels = model.predict(transformed)
         model_payload = {"kind": "2kmeans", "centers": model.centers.tolist()}
     else:
+        # Default FGMM path with BIC-based component count selection.
         model = choose_gmm(train_matrix, k_min, k_max, seed, max_iter)
         raw_labels = model.predict(transformed)
         model_payload = {
@@ -78,6 +81,7 @@ def fit_predict_labels(
     by_unit: dict[tuple[str, str], list[int]] = defaultdict(list)
     for index, row in enumerate(rows):
         by_unit[(row.get("run_id", ""), row.get("cpu_or_core_id", ""))].append(index)
+    # Temporal cleanup is applied per stream so local phase continuity is respected.
     for indices in by_unit.values():
         indices.sort(key=lambda item: safe_float(rows[item].get("timestamp_ms", "")))
         local = raw_labels[indices]
@@ -99,6 +103,7 @@ def fit_predict_labels(
 
 
 def add_interval_targets(rows: list[dict[str, str]], labels: np.ndarray, changed: np.ndarray, split_by_run: dict[str, str], horizon: int) -> list[dict[str, object]]:
+    # Convert raw labels into supervised targets (`next_phase_id`, `phase_change`) for training.
     phase_by_interval = {int(row["interval_index"]): int(labels[index]) for index, row in enumerate(rows)}
     by_unit: dict[tuple[str, str], list[int]] = defaultdict(list)
     for index, row in enumerate(rows):
@@ -138,6 +143,7 @@ def add_interval_targets(rows: list[dict[str, str]], labels: np.ndarray, changed
 
 
 def add_window_targets(window_rows: list[dict[str, str]], interval_label_rows: list[dict[str, object]]) -> list[dict[str, object]]:
+    # Window targets are derived by mapping end/target interval indices from metadata.
     by_interval = {int(row["interval_index"]): row for row in interval_label_rows}
     output: list[dict[str, object]] = []
     for row in window_rows:
@@ -162,6 +168,7 @@ def add_window_targets(window_rows: list[dict[str, str]], interval_label_rows: l
 
 
 def label_dataset(dataset_dir: Path, output_dir: Path, config: dict[str, object], split_config: dict[str, object], seed: int) -> dict[str, object]:
+    # Entry for phase labeling stage used by both CLI and Slurm pipelines.
     output_dir = ensure_dir(output_dir)
     manifest = read_json(dataset_dir / "feature_manifest.json")
     if not isinstance(manifest, dict):

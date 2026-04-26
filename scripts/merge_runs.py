@@ -29,6 +29,7 @@ EXPERIMENT_METADATA_COLUMNS = [
 
 
 def attach_experiment_metadata(item: dict[str, object], metadata: dict[str, object]) -> None:
+    # Preserve experiment-set fields so downstream training can stratify by scenario.
     for column in EXPERIMENT_METADATA_COLUMNS:
         if column in metadata:
             item[column] = metadata.get(column, "")
@@ -48,6 +49,7 @@ def phase_for_timestamp(phase_rows: list[dict[str, str]], timestamp_ms: float) -
 
 
 def interval_durations(rows: list[dict[str, object]]) -> list[float]:
+    # Infer interval duration from timestamp deltas; fallback to median positive delta.
     timestamps = [safe_float(row.get("timestamp_ms", "")) for row in rows]
     deltas = [timestamps[index] - timestamps[index - 1] for index in range(1, len(timestamps))]
     positive = [delta for delta in deltas if delta > 0]
@@ -76,6 +78,7 @@ def physical_core_id_for_cpu(metadata: dict[str, object], cpu_or_core_id: str) -
 
 
 def logical_cpu_row_identity(row: dict[str, str], metadata: dict[str, object]) -> tuple[str, str, str]:
+    # Normalize row identity depending on task-local vs system-wide collection scope.
     row_cpu = str(row.get("cpu_or_core_id", "")).strip()
     if not row_cpu:
         return str(metadata["cpu_or_core_id"]), "", "task_local"
@@ -98,6 +101,7 @@ def assign_interval_durations(rows: list[dict[str, object]]) -> None:
 
 
 def aggregate_uncore_interval_rows(run_dir: Path, metadata: dict[str, object]) -> list[dict[str, object]]:
+    # Build a timestamp-aligned uncore table keyed by normalized family names.
     uncore_specs = metadata.get("uncore_events", [])
     if not isinstance(uncore_specs, list):
         return []
@@ -147,6 +151,7 @@ def align_uncore_rows(
     core_rows: list[dict[str, object]],
     uncore_rows: list[dict[str, object]],
 ) -> int:
+    # Attach nearest uncore interval sample to each core row within tolerance.
     if not core_rows or not uncore_rows:
         return 0
     uncore_timestamps = [safe_float(row.get("timestamp_ms", "")) for row in uncore_rows]
@@ -183,6 +188,7 @@ def align_uncore_rows(
 
 
 def merge_interval_rows(run_dir: Path) -> tuple[list[dict[str, object]], int]:
+    # Core merge path: parse interval perf rows into one wide row per (timestamp, unit).
     metadata = read_json(run_dir / "metadata.json")
     alias_map = metadata["alias_map"]
     reverse = reverse_alias_map(alias_map)
@@ -265,6 +271,7 @@ def merge_aggregate_rows(run_dir: Path) -> list[dict[str, object]]:
 
 
 def resolve_run_directories(input_dir: Path, manifest_path: Path, include_all_raw_runs: bool) -> tuple[list[Path], dict[str, object]]:
+    # Prefer manifest-driven merging to avoid stale directories from prior runs.
     all_run_dirs = sorted(path for path in input_dir.iterdir() if path.is_dir())
     if include_all_raw_runs or not manifest_path.exists():
         return all_run_dirs, {
@@ -304,6 +311,7 @@ def main() -> None:
     input_dir = Path(args.input_dir)
     output_dir = ensure_dir(Path(args.output_dir))
 
+    # Stage order: select run dirs -> merge interval rows -> merge aggregate rows -> write summary.
     interval_rows: list[dict[str, object]] = []
     aggregate_rows: list[dict[str, object]] = []
     uncore_aligned_rows = 0

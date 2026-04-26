@@ -57,11 +57,13 @@ PHASE_ML_COUNTER_FAMILIES = [
 
 
 def parse_modes(value: str) -> tuple[bool, bool]:
+    # `--modes` can request interval collection, aggregate collection, or both.
     parts = set(listify_csv_argument(value))
     return ("interval" in parts or "both" in parts, "aggregate" in parts or "both" in parts)
 
 
 def events_for_profile(alias_map: dict[str, dict[str, object]], profile: str) -> list[str]:
+    # The `phase_ml` profile intentionally excludes timing-derived families (cycles/stalls).
     if profile == "default":
         return supported_event_names(alias_map)
     events: list[str] = []
@@ -75,6 +77,7 @@ def events_for_profile(alias_map: dict[str, dict[str, object]], profile: str) ->
 
 
 def phase_ml_readiness(alias_map: dict[str, dict[str, object]]) -> tuple[bool, str]:
+    # Minimum requirement: one instruction-retired event plus at least one behavior counter.
     confident = {
         family
         for family in PHASE_ML_COUNTER_FAMILIES
@@ -89,6 +92,7 @@ def phase_ml_readiness(alias_map: dict[str, dict[str, object]]) -> tuple[bool, s
 
 
 def ensure_synthetic_binary() -> Path:
+    # Build the synthetic benchmark lazily so smoke tests work on fresh checkouts.
     binary = synthetic_binary_path(PROJECT_ROOT)
     if binary.exists():
         return binary
@@ -117,6 +121,7 @@ def metadata_for_run(
     core_collection_scope: str,
     cpu_topology: dict[str, object],
 ) -> dict[str, object]:
+    # Metadata is the contract that later merge/dataset stages rely on.
     return {
         "run_id": run_id,
         "suite": suite,
@@ -164,6 +169,7 @@ def main() -> None:
     parser.set_defaults(collect_uncore=None)
     args = parser.parse_args()
 
+    # Stage 1: discover machine + PMU capabilities and pick legal event set.
     platform = detect_platform()
     perf_list_output = discover_perf_list_output()
     alias_map = build_alias_map(platform, extract_event_aliases(str(perf_list_output["stderr"]) + str(perf_list_output["stdout"])))
@@ -179,6 +185,7 @@ def main() -> None:
         elif not study_readiness["study_ready_core"]:
             raise SystemExit(str(study_readiness["strict_hardware_study_reason"]))
 
+    # Stage 2: resolve thread counts and output directories.
     requested_threads = [int(item) for item in listify_csv_argument(args.threads)] if args.threads else DEFAULT_THREADS
     thread_counts = pick_thread_counts(requested_threads, platform["online_cpus"])
     collect_interval, collect_aggregate = parse_modes(args.modes)
@@ -210,6 +217,7 @@ def main() -> None:
             raise SystemExit("SPEC CPU2017 requires --spec-config.")
         workloads = selected_workloads or spec["benchmarks"][:4]
 
+    # Stage 3: execute each (workload, threads, repetition) run and persist artifacts.
     for workload in workloads:
         for threads in thread_counts:
             affinity = cpu_affinity_for_threads(threads, platform["online_cpus"])
@@ -256,6 +264,7 @@ def main() -> None:
                 if suite == "parsec":
                     run_env["PARSECDIR"] = str(platform["parsec"]["root"])
                     run_cwd = Path(platform["parsec"]["root"])
+                # Stage 4: actual `perf stat` collection happens here.
                 results = run_workload_capture(
                     run_dir=run_dir,
                     workload_command=command,
@@ -293,6 +302,7 @@ def main() -> None:
                     }
                 )
 
+    # Stage 5: emit global manifest for merge and reproducibility.
     write_json(Path(RESULTS_DIR) / "run_manifest.json", manifest)
     print(
         json.dumps(

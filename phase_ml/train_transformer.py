@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import argparse
+import math
+import sys
 import time
 from pathlib import Path
 
@@ -15,18 +17,29 @@ from .features import fill_nan_with_medians
 from .transformer_model import build_model, require_torch
 
 
+def progress_bar(done: int, total: int, width: int = 28) -> str:
+    if total <= 0:
+        return "[" + "." * width + "]"
+    filled = int(width * done / total)
+    return "[" + "#" * filled + "." * (width - filled) + "]"
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--config", default="")
     parser.add_argument("--dataset-dir", default="")
     parser.add_argument("--label-dir", default="")
     parser.add_argument("--output-dir", default="")
+    parser.add_argument("--log-every", type=int, default=1, help="Print transformer loss every N training steps.")
     args = parser.parse_args()
     torch, nn = require_torch()
     config = load_config(args.config or None)
     dataset_dir = Path(args.dataset_dir or config["dataset"]["output_dir"])
     label_dir = Path(args.label_dir or dataset_dir.parent / "labels")
     output_dir = ensure_dir(Path(args.output_dir or dataset_dir.parent / "transformer"))
+
+    # Load windows and align them to labeled window ids so split logic is
+    # driven by the canonical label CSV.
     arrays = np.load(dataset_dir / "window_tensors.npz", allow_pickle=True)
     labels = load_csv_rows(label_dir / "window_labels.csv")
     label_model = read_json(label_dir / "label_model.json")
@@ -54,12 +67,25 @@ def main() -> None:
     batch_size = int(config["transformer"].get("batch_size", 256))
     epochs = int(config["transformer"].get("epochs", 8))
     train_indices = np.where(train_mask)[0]
+    steps_per_epoch = int(math.ceil(train_indices.size / max(1, batch_size)))
+    total_steps = epochs * steps_per_epoch
     amp_enabled = device.type == "cuda"
     amp_dtype = torch.bfloat16 if str(config["transformer"].get("amp_dtype", "bf16")) == "bf16" else torch.float16
-    for _ in range(epochs):
+    history_rows = []
+    train_started = time.perf_counter()
+    global_step = 0
+    print(
+        f"[transformer] device={device} train_windows={train_indices.size} eval_windows={int(np.sum(eval_mask))} "
+        f"epochs={epochs} batch_size={batch_size} steps_per_epoch={steps_per_epoch}",
+        file=sys.stderr,
+        flush=True,
+    )
+    for epoch_index in range(1, epochs + 1):
+        # Shuffle per epoch for SGD-style training.
         np.random.shuffle(train_indices)
         model.train()
-        for start in range(0, train_indices.size, batch_size):
+        epoch_losses = []
+        for step_index, start in enumerate(range(0, train_indices.size, batch_size), start=1):
             idx = train_indices[start : start + batch_size]
             xb = torch.tensor(x[idx], dtype=torch.float32, device=device)
             yb = torch.tensor(y[idx], dtype=torch.long, device=device)
@@ -67,9 +93,47 @@ def main() -> None:
             optimizer.zero_grad(set_to_none=True)
             with torch.autocast(device_type=device.type, dtype=amp_dtype, enabled=amp_enabled):
                 logits, change_logits = model(xb)
-                loss = ce(logits, yb) + bce(change_logits, cb)
+                next_loss = ce(logits, yb)
+                change_loss = bce(change_logits, cb)
+                loss = next_loss + change_loss
             loss.backward()
             optimizer.step()
+            global_step += 1
+            loss_value = float(loss.detach().cpu())
+            next_loss_value = float(next_loss.detach().cpu())
+            change_loss_value = float(change_loss.detach().cpu())
+            epoch_losses.append(loss_value)
+            elapsed = time.perf_counter() - train_started
+            rate = global_step / elapsed if elapsed > 0 else 0.0
+            eta = (total_steps - global_step) / rate if rate > 0 else 0.0
+            history_rows.append(
+                {
+                    "epoch": epoch_index,
+                    "step": step_index,
+                    "global_step": global_step,
+                    "batch_size": len(idx),
+                    "loss": loss_value,
+                    "next_phase_loss": next_loss_value,
+                    "phase_change_loss": change_loss_value,
+                    "elapsed_s": elapsed,
+                    "eta_s": eta,
+                }
+            )
+            if args.log_every > 0 and (global_step % args.log_every == 0 or step_index == steps_per_epoch):
+                print(
+                    f"[transformer] {progress_bar(global_step, total_steps)} "
+                    f"epoch={epoch_index}/{epochs} step={step_index}/{steps_per_epoch} "
+                    f"global={global_step}/{total_steps} loss={loss_value:.6f} "
+                    f"next={next_loss_value:.6f} change={change_loss_value:.6f} "
+                    f"elapsed={elapsed/60.0:.1f}m eta={eta/60.0:.1f}m",
+                    file=sys.stderr,
+                    flush=True,
+                )
+        mean_epoch_loss = sum(epoch_losses) / len(epoch_losses) if epoch_losses else 0.0
+        print(f"[transformer] epoch {epoch_index}/{epochs} mean_loss={mean_epoch_loss:.6f}", file=sys.stderr, flush=True)
+
+    # Run a full forward pass to emit predictions that downstream scripts
+    # evaluate with the same schema as baseline models.
     model.eval()
     start_time = time.perf_counter()
     with torch.no_grad():
@@ -79,6 +143,11 @@ def main() -> None:
         pred_change = (torch.sigmoid(change_logits) >= 0.5).cpu().numpy().astype(int)
     elapsed_ms = (time.perf_counter() - start_time) * 1000.0
     torch.save(model.state_dict(), output_dir / "transformer.pt")
+    write_csv_rows(
+        output_dir / "training_history.csv",
+        history_rows,
+        ["epoch", "step", "global_step", "batch_size", "loss", "next_phase_loss", "phase_change_loss", "elapsed_s", "eta_s"],
+    )
     prediction_rows = []
     for row, true_phase, predicted, true_change, predicted_change in zip(labels, y, pred, change.astype(int), pred_change):
         prediction_rows.append(
@@ -101,6 +170,13 @@ def main() -> None:
         {
             "device": str(device),
             "phase_count": phase_count,
+            "epochs": epochs,
+            "batch_size": batch_size,
+            "train_windows": int(train_indices.size),
+            "eval_windows": int(np.sum(eval_mask)),
+            "training_steps": int(global_step),
+            "final_training_loss": float(history_rows[-1]["loss"]) if history_rows else 0.0,
+            "training_history_csv": str(output_dir / "training_history.csv"),
             "inference_ms_total": elapsed_ms,
             "inference_us_per_sample": elapsed_ms * 1000.0 / max(1, len(labels)),
         },

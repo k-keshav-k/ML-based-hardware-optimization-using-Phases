@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# Wrapper for fixed-frequency data collection and DVFS-stability analysis.
 FREQUENCIES_KHZ=${FREQUENCIES_KHZ:?Set FREQUENCIES_KHZ, for example FREQUENCIES_KHZ=1200000,2200000}
 OUTPUT_ROOT=${OUTPUT_ROOT:-results/dvfs_stress_core_uncore_large}
 WORKLOADS=${WORKLOADS:-blackscholes,canneal,fluidanimate,freqmine,swaptions,streamcluster}

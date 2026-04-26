@@ -20,6 +20,8 @@ def evaluate_predictions(prediction_files: list[Path], output_dir: Path) -> dict
         if not rows:
             continue
         model = rows[0].get("model", path.stem.replace("_predictions", ""))
+        # By default we report test/val quality; if split is missing we fall
+        # back to the full file so external predictions still evaluate.
         eval_rows = [row for row in rows if row.get("split", "") != "train"] or rows
         y_true = np.asarray([int(row["y_true_next_phase"]) for row in eval_rows], dtype=int)
         y_pred = np.asarray([int(row["y_pred_next_phase"]) for row in eval_rows], dtype=int)

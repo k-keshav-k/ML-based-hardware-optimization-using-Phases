@@ -167,6 +167,7 @@ def write_paper(config: dict[str, object], validation: dict[str, object]) -> Non
     paper_dir.mkdir(parents=True, exist_ok=True)
     write_references(Path(str(config["source_report_dir"])), paper_dir)
 
+    # Pull all computed CSV/JSON artifacts and translate them into paper tables.
     metrics = load_rows(Path(str(config["eval_dir"])) / "model_comparison.csv")
     replay = load_rows(analysis_dir / "trace_policy_replay.csv")
     ablation = load_rows(analysis_dir / "detector_ablation.csv")
@@ -422,6 +423,7 @@ def run(config_path: Path) -> None:
     figure_dir.mkdir(parents=True, exist_ok=True)
     analysis_dir.mkdir(parents=True, exist_ok=True)
 
+    # Stage 1: regenerate analysis tables from existing model artifacts.
     copy_existing_figures(source_report_dir, figure_dir)
     validation = validate(processed_dir, dataset_dir, label_dir, eval_dir, analysis_dir / "validation_summary.json")
     analyze_uniqueness(dataset_dir, label_dir, analysis_dir)
@@ -440,12 +442,14 @@ def run(config_path: Path) -> None:
         summary_path = dvfs_analysis_dir / "dvfs_stress_summary.json"
         if summary_path.exists():
             shutil.copy2(summary_path, analysis_dir / "dvfs_stress_summary.json")
+    # Stage 2: render publication figures from analysis CSV outputs.
     plot_policy_replay(analysis_dir, figure_dir)
     plot_ablation(analysis_dir, figure_dir)
     plot_generalization(analysis_dir, figure_dir)
     plot_pmu_slots(analysis_dir, figure_dir)
     plot_online_results(analysis_dir, figure_dir)
     plot_dvfs_results(analysis_dir, figure_dir)
+    # Stage 3: synthesize paper/main.tex from measured artifacts only.
     write_paper(config, validation)
     write_json(Path("data/manifest") / f"{config['name']}_artifact_manifest.json", config)
     print(f"Regenerated paper artifact from {config_path}")

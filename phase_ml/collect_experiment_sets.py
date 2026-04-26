@@ -5,6 +5,8 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import sys
+import time
 import uuid
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
@@ -32,10 +34,12 @@ EXPERIMENT_SET_NAMES = {
 
 
 def parse_int_list(value: str) -> list[int]:
+    # Accept comma-delimited thread specifications such as "2,4,8".
     return [int(item) for item in listify_csv_argument(value)]
 
 
 def chunked(values: list[str], size: int) -> list[list[str]]:
+    # Group workloads for concurrent sets; keep last group from becoming singleton when possible.
     groups = [values[index : index + size] for index in range(0, len(values), size)]
     if len(values) > 1 and groups and len(groups[-1]) == 1:
         groups[-1] = groups[-1] + values[: size - 1]
@@ -43,6 +47,7 @@ def chunked(values: list[str], size: int) -> list[list[str]]:
 
 
 def affinity_groups(available_cpus: list[int], thread_counts: list[int]) -> list[list[int]]:
+    # Allocate disjoint affinity groups for simultaneously launched processes.
     groups: list[list[int]] = []
     offset = 0
     fallback = available_cpus or list(range(max(sum(thread_counts), 1)))
@@ -62,6 +67,7 @@ def selected_workloads(platform: dict[str, object], requested: str) -> list[str]
 
 
 def build_common_context(args: argparse.Namespace) -> dict[str, object]:
+    # Shared discovery for all tasks (platform, alias map, event list, uncore support).
     platform = detect_platform()
     if not platform["parsec"]["available"]:
         raise SystemExit("PARSEC was not detected on this machine.")
@@ -86,6 +92,7 @@ def build_common_context(args: argparse.Namespace) -> dict[str, object]:
 
 
 def run_one_task(task: dict[str, object]) -> dict[str, object]:
+    # One task = one PARSEC process capture (with metadata and perf artifacts).
     run_dir = ensure_dir(Path(str(task["run_dir"])))
     write_json(run_dir / "metadata.json", task["metadata"])
     results = run_workload_capture(
@@ -110,6 +117,13 @@ def run_one_task(task: dict[str, object]) -> dict[str, object]:
     }
 
 
+def progress_bar(done: int, total: int, width: int = 28) -> str:
+    if total <= 0:
+        return "[" + "." * width + "]"
+    filled = int(width * done / total)
+    return "[" + "#" * filled + "." * (width - filled) + "]"
+
+
 def make_task(
     *,
     context: dict[str, object],
@@ -126,6 +140,7 @@ def make_task(
     interval_ms: int,
     rep: int,
 ) -> dict[str, object]:
+    # Convert logical experiment definition into an executable, fully-described task payload.
     platform = context["platform"]
     unique_suffix = uuid.uuid4().hex[:10]
     run_id = f"parsec_{experiment_set}_r{rep}_{concurrent_group_id}_{workload}_p{process_index}_t{threads}_{utc_now_token()}_{unique_suffix}"
@@ -180,6 +195,7 @@ def make_task(
 
 
 def build_tasks(args: argparse.Namespace, context: dict[str, object]) -> list[dict[str, object]]:
+    # Enumerate set1/set2/set3 tasks for every repetition and workload grouping.
     platform = context["platform"]
     workloads = selected_workloads(platform, args.workloads)
     if not workloads:
@@ -280,7 +296,9 @@ def main() -> None:
     parser.add_argument("--dry-run", action="store_true")
     args = parser.parse_args()
 
+    # Stage 1: discover collection context.
     context = build_common_context(args)
+    # Stage 2: materialize concrete execution plan and write manifest.
     tasks = build_tasks(args, context)
     manifest = [task["metadata"] for task in tasks]
     manifest_path = Path(args.output_dir) / "phase_ml_experiment_manifest.json"
@@ -292,11 +310,38 @@ def main() -> None:
     tasks_by_group: dict[str, list[dict[str, object]]] = {}
     for task in tasks:
         tasks_by_group.setdefault(str(task["execution_group_key"]), []).append(task)
-    for group_tasks in tasks_by_group.values():
+    total_tasks = len(tasks)
+    completed_tasks = 0
+    failed_tasks = 0
+    started = time.perf_counter()
+    total_groups = len(tasks_by_group)
+    print(f"[collection] starting {total_tasks} perf tasks across {total_groups} concurrent groups", file=sys.stderr, flush=True)
+    # Stage 3: execute one concurrent group at a time, but each group in parallel.
+    for group_index, group_tasks in enumerate(tasks_by_group.values(), start=1):
+        group_id = str(group_tasks[0]["execution_group_key"]) if group_tasks else ""
+        print(
+            f"[collection] group {group_index}/{total_groups}: {group_id} ({len(group_tasks)} concurrent task(s))",
+            file=sys.stderr,
+            flush=True,
+        )
         with ThreadPoolExecutor(max_workers=len(group_tasks)) as executor:
             futures = [executor.submit(run_one_task, task) for task in group_tasks]
             for future in as_completed(futures):
-                results.append(future.result())
+                item = future.result()
+                results.append(item)
+                completed_tasks += 1
+                if item.get("returncode") not in (0, None):
+                    failed_tasks += 1
+                elapsed = time.perf_counter() - started
+                rate = completed_tasks / elapsed if elapsed > 0 else 0.0
+                eta = (total_tasks - completed_tasks) / rate if rate > 0 else 0.0
+                print(
+                    f"[collection] {progress_bar(completed_tasks, total_tasks)} "
+                    f"{completed_tasks}/{total_tasks} done, failed={failed_tasks}, "
+                    f"elapsed={elapsed/60.0:.1f}m, eta={eta/60.0:.1f}m",
+                    file=sys.stderr,
+                    flush=True,
+                )
     write_json(Path(args.output_dir) / "phase_ml_experiment_results.json", results)
     failed = [item for item in results if item.get("returncode") not in (0, None)]
     print(json.dumps({"runs": len(results), "failed": len(failed), "manifest": str(manifest_path)}, indent=2))

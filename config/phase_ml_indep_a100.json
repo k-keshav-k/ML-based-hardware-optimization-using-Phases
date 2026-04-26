@@ -1,8 +1,8 @@
 {
   "random_seed": 17,
   "dataset": {
-    "input_csv": "/scratch/kk6081/indep/processed_phase_ml_core_uncore_large/merged_interval_dataset.csv",
-    "output_dir": "/scratch/kk6081/indep/phase_ml_core_uncore_large/dataset",
+    "input_csv": "/scratch/kk6081/indep/processed_phase_ml_core_uncore_final/merged_interval_dataset.csv",
+    "output_dir": "/scratch/kk6081/indep/phase_ml_core_uncore_final/dataset",
     "sequence_length": 32,
     "stride": 1,
     "prediction_horizon": 20

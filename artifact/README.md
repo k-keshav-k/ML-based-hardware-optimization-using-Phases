@@ -2,6 +2,8 @@
 
 This artifact regenerates the conference-style draft and analysis tables from the available phase-ML outputs.
 
+For a full architecture and stage-by-stage walkthrough, see [docs/codebase_flow.md](/home/kk6081/res/docs/codebase_flow.md).
+
 ## Requirements
 
 - Python 3.9+
@@ -55,6 +57,22 @@ latexmk -pdf -interaction=nonstopmode -halt-on-error main.tex
 - Detector ablations and transfer stress tests.
 - Hardware cost estimates.
 - PMU counter-slot sensitivity.
+
+## Progress Logs
+
+Dataset collection prints progress to stderr in the form:
+
+```text
+[collection] [########....................] 42/300 done, failed=0, elapsed=12.4m, eta=76.1m
+```
+
+Transformer training prints per-step losses to stderr and writes:
+
+```bash
+/scratch/kk6081/indep/phase_ml_core_uncore_large/transformer/training_history.csv
+```
+
+The Slurm output/error files under `logs/` contain the live progress stream.
 
 ## Live Online Co-Scheduling
 

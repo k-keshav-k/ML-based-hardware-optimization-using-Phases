@@ -1,3 +1,5 @@
+"""Integration-style tests for the phase-ML data/model pipeline."""
+
 from __future__ import annotations
 
 import csv
@@ -54,6 +56,8 @@ HEADER = [
 
 
 def write_fixture(path: Path) -> None:
+    # Two workloads with two thread settings each so split/group logic sees
+    # multiple run ids and execution modes.
     runs = [
         ("parsec_blackscholes_t1_r1", "blackscholes", 1, "0"),
         ("parsec_blackscholes_t4_r2", "blackscholes", 4, "0,1,2,3"),
@@ -109,6 +113,7 @@ def write_fixture(path: Path) -> None:
                 )
         writer.writerow(
             {
+                # Non-PARSEC row verifies dataset filtering by suite column.
                 "timestamp_ms": 0,
                 "interval_duration_ms": 10,
                 "workload": "compute",

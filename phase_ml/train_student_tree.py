@@ -48,6 +48,7 @@ def train_student(
     flat, true_next, current, true_change, run_length = aligned_arrays(x, label_rows, medians)
     del current, run_length
 
+    # Distillation target: teacher predictions keyed by window_id.
     teacher_by_window = load_teacher_predictions(teacher_predictions)
     keep_indices: list[int] = []
     teacher_next: list[int] = []
@@ -83,6 +84,8 @@ def train_student(
     pred_next = phase_tree.predict(flat)
     pred_change = change_tree.predict(flat)
 
+    # Student quality is reported against true labels on eval split, with
+    # additional agreement metrics versus the teacher outputs.
     metrics = classification_metrics(true_next[eval_mask], pred_next[eval_mask], true_change[eval_mask], pred_change[eval_mask])
     metrics["teacher_next_agreement"] = float(np.mean(pred_next[eval_mask] == teacher_next_array[eval_mask]))
     metrics["teacher_change_agreement"] = float(np.mean(pred_change[eval_mask] == teacher_change_array[eval_mask]))
