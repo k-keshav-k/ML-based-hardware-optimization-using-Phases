@@ -4,7 +4,7 @@
 #SBATCH --partition=c12m85-a100-1
 #SBATCH --output=./logs/%j_%x.out
 #SBATCH --error=./logs/%j_%x.err
-#SBATCH --time=02:00:00
+#SBATCH --time=04:00:00
 #SBATCH --gres=gpu:1
 #SBATCH --requeue
 
@@ -93,7 +93,7 @@ uv run -m phase_ml.train_baselines \
 uv run -m phase_ml.train_transformer \
   --config \${PHASE_ML_CONFIG} \
   \${DATASET_OUTPUT_DIR:+--dataset-dir \${DATASET_OUTPUT_DIR}} \
-  --log-every \${TRANSFORMER_LOG_EVERY:-1} \
+  --log-every \${TRANSFORMER_LOG_EVERY:-10} \
   --eval-batch-size \${TRANSFORMER_EVAL_BATCH_SIZE:-1024}
 
 uv run -m phase_ml.train_student_tree \

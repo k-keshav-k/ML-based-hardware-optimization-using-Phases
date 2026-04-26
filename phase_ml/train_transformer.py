@@ -215,6 +215,41 @@ def main() -> None:
         model.to(device)
         print(f"[transformer] restored best epoch={best_epoch} val_acc={best_val_accuracy:.4f}", file=sys.stderr, flush=True)
 
+    summary_payload = {
+        "device": str(device),
+        "phase_count": phase_count,
+        "model_type": "phase_lm_rope",
+        "epochs": epochs,
+        "batch_size": batch_size,
+        "eval_batch_size": eval_batch_size,
+        "feature_standardization": "label_model_standardizer",
+        "class_weight_power": class_weight_power,
+        "change_loss_weight": change_loss_weight,
+        "train_windows": int(train_indices.size),
+        "eval_windows": int(np.sum(eval_mask)),
+        "training_steps": int(global_step),
+        "best_epoch": int(best_epoch),
+        "best_validation_accuracy": float(best_val_accuracy),
+        "validation_history_csv": str(output_dir / "validation_history.csv"),
+        "final_training_loss": float(history_rows[-1]["loss"]) if history_rows else 0.0,
+        "training_history_csv": str(output_dir / "training_history.csv"),
+        "prediction_export_complete": False,
+        "inference_ms_total": 0.0,
+        "inference_us_per_sample": 0.0,
+    }
+    torch.save(model.state_dict(), output_dir / "transformer.pt")
+    write_csv_rows(
+        output_dir / "training_history.csv",
+        history_rows,
+        ["epoch", "step", "global_step", "batch_size", "loss", "next_phase_loss", "phase_change_loss", "elapsed_s", "eta_s"],
+    )
+    write_csv_rows(
+        output_dir / "validation_history.csv",
+        validation_rows,
+        ["epoch", "loss", "next_phase_loss", "phase_change_loss", "accuracy", "phase_change_accuracy", "samples"],
+    )
+    write_json(output_dir / "transformer_summary.json", summary_payload)
+
     # Emit predictions in mini-batches to avoid GPU OOM on large datasets.
     model.eval()
     start_time = time.perf_counter()
@@ -229,17 +264,6 @@ def main() -> None:
     pred = np.concatenate(pred_parts, axis=0) if pred_parts else np.zeros(0, dtype=int)
     pred_change = np.concatenate(pred_change_parts, axis=0) if pred_change_parts else np.zeros(0, dtype=int)
     elapsed_ms = (time.perf_counter() - start_time) * 1000.0
-    torch.save(model.state_dict(), output_dir / "transformer.pt")
-    write_csv_rows(
-        output_dir / "training_history.csv",
-        history_rows,
-        ["epoch", "step", "global_step", "batch_size", "loss", "next_phase_loss", "phase_change_loss", "elapsed_s", "eta_s"],
-    )
-    write_csv_rows(
-        output_dir / "validation_history.csv",
-        validation_rows,
-        ["epoch", "loss", "next_phase_loss", "phase_change_loss", "accuracy", "phase_change_accuracy", "samples"],
-    )
     prediction_rows = []
     for row, true_phase, predicted, true_change, predicted_change in zip(labels, y, pred, change.astype(int), pred_change):
         prediction_rows.append(
@@ -257,30 +281,10 @@ def main() -> None:
             }
         )
     write_csv_rows(output_dir / "transformer_predictions.csv", prediction_rows)
-    write_json(
-        output_dir / "transformer_summary.json",
-        {
-            "device": str(device),
-            "phase_count": phase_count,
-            "model_type": "phase_lm_rope",
-            "epochs": epochs,
-            "batch_size": batch_size,
-            "eval_batch_size": eval_batch_size,
-            "feature_standardization": "label_model_standardizer",
-            "class_weight_power": class_weight_power,
-            "change_loss_weight": change_loss_weight,
-            "train_windows": int(train_indices.size),
-            "eval_windows": int(np.sum(eval_mask)),
-            "training_steps": int(global_step),
-            "best_epoch": int(best_epoch),
-            "best_validation_accuracy": float(best_val_accuracy),
-            "validation_history_csv": str(output_dir / "validation_history.csv"),
-            "final_training_loss": float(history_rows[-1]["loss"]) if history_rows else 0.0,
-            "training_history_csv": str(output_dir / "training_history.csv"),
-            "inference_ms_total": elapsed_ms,
-            "inference_us_per_sample": elapsed_ms * 1000.0 / max(1, len(labels)),
-        },
-    )
+    summary_payload["prediction_export_complete"] = True
+    summary_payload["inference_ms_total"] = elapsed_ms
+    summary_payload["inference_us_per_sample"] = elapsed_ms * 1000.0 / max(1, len(labels))
+    write_json(output_dir / "transformer_summary.json", summary_payload)
     print(f"Trained phase LM on {device}; wrote predictions for {len(labels)} windows.")
 
 
