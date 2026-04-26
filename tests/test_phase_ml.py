@@ -18,7 +18,7 @@ from phase_ml.collect_experiment_sets import chunked
 from phase_ml.dataset import build_dataset
 from phase_ml.evaluation import evaluate_predictions
 from phase_ml.labeling import label_dataset
-from phase_ml.train_student_tree import train_student
+from phase_ml.train_student_tree import student_feature_matrix, train_student
 from phase_ml.transformer_model import build_model, require_torch
 from scripts.merge_runs import merge_interval_rows
 from scripts.run_workloads import events_for_profile, phase_ml_readiness
@@ -238,6 +238,8 @@ class PhaseMLTests(unittest.TestCase):
             )
             self.assertIn("teacher_next_agreement", student_summary)
             self.assertTrue((root / "student_tree" / "student_decision_tree_predictions.csv").exists())
+            student_model = json.loads((root / "student_tree" / "student_decision_tree_model.json").read_text(encoding="utf-8"))
+            self.assertEqual(student_model["feature_suffix"], ["current_phase_id", "log1p_current_run_length"])
             evaluation = evaluate_predictions(sorted((root / "baselines").glob("*_predictions.csv")), root / "evaluation")
             self.assertIn("last_value", evaluation)
             self.assertTrue((root / "evaluation" / "model_comparison.csv").exists())
@@ -247,6 +249,16 @@ class PhaseMLTests(unittest.TestCase):
         filtered, changed = enforce_min_duration(labels, 2)
         self.assertEqual(filtered.tolist(), [1, 1, 1, 1, 1])
         self.assertTrue(changed[2])
+
+    def test_student_feature_matrix_adds_temporal_state(self) -> None:
+        flat = np.asarray([[1.0, 2.0], [3.0, 4.0]])
+        current = np.asarray([5, 6])
+        run_length = np.asarray([0, 3])
+        features = student_feature_matrix(flat, current, run_length)
+        self.assertEqual(features.shape, (2, 4))
+        self.assertEqual(features[:, :2].tolist(), flat.tolist())
+        self.assertEqual(features[:, 2].tolist(), [5.0, 6.0])
+        np.testing.assert_allclose(features[:, 3], np.log1p(run_length.astype(float)))
 
     def test_phase_ml_event_profile_avoids_cycles(self) -> None:
         alias_map = {

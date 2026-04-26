@@ -59,7 +59,7 @@ DEFAULT_PHASE_ML_CONFIG: dict[str, Any] = {
         "amp_dtype": "bf16",
     },
     "student": {
-        "decision_tree_max_depth": 4,
+        "decision_tree_max_depth": 6,
         "decision_tree_min_samples_leaf": 8,
     },
 }

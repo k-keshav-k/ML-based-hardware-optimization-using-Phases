@@ -31,6 +31,10 @@ def load_teacher_predictions(path: Path) -> dict[int, dict[str, str]]:
     return {int(row["window_id"]): row for row in rows}
 
 
+def student_feature_matrix(flat: np.ndarray, current: np.ndarray, run_length: np.ndarray) -> np.ndarray:
+    return np.c_[flat, current.astype(float), np.log1p(run_length.astype(float))]
+
+
 def train_student(
     dataset_dir: Path,
     label_dir: Path,
@@ -46,7 +50,6 @@ def train_student(
     label_model = read_json(label_dir / "label_model.json")
     medians = np.asarray(label_model["model"]["standardizer"]["medians"], dtype=float)  # type: ignore[index]
     flat, true_next, current, true_change, run_length = aligned_arrays(x, label_rows, medians)
-    del current, run_length
 
     # Distillation target: teacher predictions keyed by window_id.
     teacher_by_window = load_teacher_predictions(teacher_predictions)
@@ -66,7 +69,7 @@ def train_student(
         raise SystemExit("Teacher predictions did not overlap with labeled windows.")
 
     keep = np.asarray(keep_indices, dtype=int)
-    flat = flat[keep]
+    flat = student_feature_matrix(flat[keep], current[keep], run_length[keep])
     true_next = true_next[keep]
     true_change = true_change[keep]
     teacher_next_array = np.asarray(teacher_next, dtype=int)
@@ -115,6 +118,8 @@ def train_student(
             "max_depth": max_depth,
             "min_samples_leaf": min_samples_leaf,
             "teacher_predictions": str(teacher_predictions),
+            "feature_suffix": ["current_phase_id", "log1p_current_run_length"],
+            "feature_count": int(flat.shape[1]),
             "phase_tree": node_to_dict(phase_tree.root),
             "phase_change_tree": node_to_dict(change_tree.root),
         },
