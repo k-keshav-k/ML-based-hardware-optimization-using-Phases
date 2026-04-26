@@ -1,4 +1,4 @@
-"""CLI for training the PyTorch transformer teacher."""
+"""CLI for training the PyTorch RoPE phase-LM teacher."""
 
 from __future__ import annotations
 
@@ -30,7 +30,7 @@ def main() -> None:
     parser.add_argument("--dataset-dir", default="")
     parser.add_argument("--label-dir", default="")
     parser.add_argument("--output-dir", default="")
-    parser.add_argument("--log-every", type=int, default=1, help="Print transformer loss every N training steps.")
+    parser.add_argument("--log-every", type=int, default=1, help="Print phase-LM loss every N training steps.")
     parser.add_argument(
         "--eval-batch-size",
         type=int,
@@ -50,9 +50,13 @@ def main() -> None:
     labels = load_csv_rows(label_dir / "window_labels.csv")
     label_model = read_json(label_dir / "label_model.json")
     medians = np.asarray(label_model["model"]["standardizer"]["medians"], dtype=float)
+    means = np.asarray(label_model["model"]["standardizer"]["means"], dtype=float)
+    scales = np.asarray(label_model["model"]["standardizer"]["scales"], dtype=float)
+    scales[scales < 1e-12] = 1.0
     used_indices = np.asarray([int(row["window_id"]) for row in labels], dtype=int)
     x = arrays["X"].astype(float)[used_indices]
     x = fill_nan_with_medians(x.reshape(-1, x.shape[-1]), medians).reshape(x.shape)
+    x = (x - means) / scales
     y = np.asarray([int(row["next_phase_id"]) for row in labels], dtype=int)
     change = np.asarray([int(row["phase_change"]) for row in labels], dtype=float)
     split = np.asarray([row.get("split", "train") for row in labels])
@@ -60,6 +64,7 @@ def main() -> None:
     eval_mask = split != "train"
     if not np.any(eval_mask):
         eval_mask = np.ones(split.shape[0], dtype=bool)
+    train_indices = np.where(train_mask)[0]
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     phase_count = int(max((int(np.max(y)) + 1) if y.size else 1, int(label_model.get("phase_count", 1))))
     model = build_model(x.shape[-1], phase_count, config["transformer"]).to(device)
@@ -68,12 +73,20 @@ def main() -> None:
         lr=float(config["transformer"].get("learning_rate", 0.0003)),
         weight_decay=float(config["transformer"].get("weight_decay", 0.01)),
     )
-    ce = nn.CrossEntropyLoss()
+    class_weight_power = float(config["transformer"].get("class_weight_power", 0.0))
+    ce_weight = None
+    if class_weight_power > 0.0 and train_indices.size > 0:
+        counts = np.bincount(y[train_indices], minlength=phase_count).astype(float)
+        counts[counts < 1.0] = 1.0
+        weights = (counts.sum() / counts) ** class_weight_power
+        weights = weights / max(1e-12, weights.mean())
+        ce_weight = torch.tensor(weights, dtype=torch.float32, device=device)
+    ce = nn.CrossEntropyLoss(weight=ce_weight)
     bce = nn.BCEWithLogitsLoss()
+    change_loss_weight = float(config["transformer"].get("change_loss_weight", 1.0))
     batch_size = int(config["transformer"].get("batch_size", 256))
     eval_batch_size = int(args.eval_batch_size or batch_size)
     epochs = int(config["transformer"].get("epochs", 8))
-    train_indices = np.where(train_mask)[0]
     steps_per_epoch = int(math.ceil(train_indices.size / max(1, batch_size)))
     total_steps = epochs * steps_per_epoch
     amp_enabled = device.type == "cuda"
@@ -102,7 +115,7 @@ def main() -> None:
                 logits, change_logits = model(xb)
                 next_loss = ce(logits, yb)
                 change_loss = bce(change_logits, cb)
-                loss = next_loss + change_loss
+                loss = next_loss + change_loss_weight * change_loss
             loss.backward()
             optimizer.step()
             global_step += 1
@@ -181,9 +194,13 @@ def main() -> None:
         {
             "device": str(device),
             "phase_count": phase_count,
+            "model_type": "phase_lm_rope",
             "epochs": epochs,
             "batch_size": batch_size,
             "eval_batch_size": eval_batch_size,
+            "feature_standardization": "label_model_standardizer",
+            "class_weight_power": class_weight_power,
+            "change_loss_weight": change_loss_weight,
             "train_windows": int(train_indices.size),
             "eval_windows": int(np.sum(eval_mask)),
             "training_steps": int(global_step),
@@ -193,7 +210,7 @@ def main() -> None:
             "inference_us_per_sample": elapsed_ms * 1000.0 / max(1, len(labels)),
         },
     )
-    print(f"Trained transformer on {device}; wrote predictions for {len(labels)} windows.")
+    print(f"Trained phase LM on {device}; wrote predictions for {len(labels)} windows.")
 
 
 if __name__ == "__main__":

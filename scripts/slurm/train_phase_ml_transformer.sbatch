@@ -10,7 +10,7 @@
 
 # Single-job SLURM pipeline:
 # 1) validate/reuse dataset + labels
-# 2) train baselines + transformer + student
+# 2) train baselines + RoPE phase-LM teacher + student
 # 3) run evaluation export
 singularity exec --bind /scratch --nv \
   --overlay "${OVERLAY_PATH:-/scratch/kk6081/overlay-25GB-500K.ext3:rw}" \
@@ -32,7 +32,7 @@ export DATASET_INPUT_CSV=\${DATASET_INPUT_CSV:-}
 export DATASET_OUTPUT_DIR=\${DATASET_OUTPUT_DIR:-}
 
 cd \${PROJECT_DIR:-/scratch/kk6081/Phase-pipeline/ML-based-hardware-optimization-using-Phases}
-mkdir -p /scratch/kk6081/indep/phase_ml_core_uncore_large logs
+mkdir -p logs
 echo \"PROJECT_DIR=\$(pwd)\"
 echo \"PHASE_ML_CONFIG=\${PHASE_ML_CONFIG}\"
 echo \"DATASET_INPUT_CSV=\${DATASET_INPUT_CSV:-<from config>}\"
@@ -44,6 +44,10 @@ if ! command -v uv >/dev/null 2>&1; then
 fi
 
 uv sync --extra phase-ml
+
+RUN_ROOT=\$(uv run python -c \"import os; from pathlib import Path; from phase_ml.config import load_config; c=load_config(os.environ['PHASE_ML_CONFIG']); print(Path(os.environ.get('DATASET_OUTPUT_DIR') or c['dataset']['output_dir']).parent)\")
+mkdir -p \"\${RUN_ROOT}\"
+echo \"RUN_ROOT=\${RUN_ROOT}\"
 
 uv run python -c \"import os; from pathlib import Path; from phase_ml.config import load_config; c=load_config(os.environ['PHASE_ML_CONFIG']); dataset_out = os.environ.get('DATASET_OUTPUT_DIR') or c['dataset']['output_dir']; dataset_in = os.environ.get('DATASET_INPUT_CSV') or c['dataset']['input_csv']; print('dataset.input_csv=' + str(dataset_in)); print('dataset.output_dir=' + str(dataset_out)); print('label_dir=' + str(Path(dataset_out).parent / 'labels'))\"
 
@@ -97,8 +101,8 @@ uv run -m phase_ml.train_student_tree \
   \${DATASET_OUTPUT_DIR:+--dataset-dir \${DATASET_OUTPUT_DIR}}
 
 uv run -m phase_ml.evaluate \
-  --prediction-dir \${BASELINE_PREDICTION_DIR:-/scratch/kk6081/indep/phase_ml_core_uncore_large/baselines} \
-  --transformer-predictions \${TRANSFORMER_PREDICTIONS:-/scratch/kk6081/indep/phase_ml_core_uncore_large/transformer/transformer_predictions.csv} \
-  --extra-predictions \${EXTRA_PREDICTIONS:-/scratch/kk6081/indep/phase_ml_core_uncore_large/student_tree/student_decision_tree_predictions.csv} \
-  --output-dir \${EVAL_OUTPUT_DIR:-/scratch/kk6081/indep/phase_ml_core_uncore_large/evaluation}
+  --prediction-dir \${BASELINE_PREDICTION_DIR:-\${RUN_ROOT}/baselines} \
+  --transformer-predictions \${TRANSFORMER_PREDICTIONS:-\${RUN_ROOT}/transformer/transformer_predictions.csv} \
+  --extra-predictions \${EXTRA_PREDICTIONS:-\${RUN_ROOT}/student_tree/student_decision_tree_predictions.csv} \
+  --output-dir \${EVAL_OUTPUT_DIR:-\${RUN_ROOT}/evaluation}
 "

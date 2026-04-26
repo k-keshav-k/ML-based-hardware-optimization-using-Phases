@@ -19,7 +19,7 @@ from phase_ml.dataset import build_dataset
 from phase_ml.evaluation import evaluate_predictions
 from phase_ml.labeling import label_dataset
 from phase_ml.train_student_tree import train_student
-from phase_ml.transformer_model import require_torch
+from phase_ml.transformer_model import build_model, require_torch
 from scripts.merge_runs import merge_interval_rows
 from scripts.run_workloads import events_for_profile, phase_ml_readiness
 
@@ -261,6 +261,27 @@ class PhaseMLTests(unittest.TestCase):
         self.assertNotIn("cycles", events)
         self.assertNotIn("resource_stalls.any", events)
         self.assertTrue(phase_ml_readiness(alias_map)[0])
+
+    def test_phase_language_model_forward_shapes(self) -> None:
+        try:
+            torch, _ = require_torch()
+        except SystemExit:
+            self.skipTest("PyTorch is not installed")
+        model = build_model(
+            input_dim=5,
+            phase_count=3,
+            config={
+                "hidden_dim": 16,
+                "num_layers": 2,
+                "num_heads": 4,
+                "ff_dim": 32,
+                "dropout": 0.0,
+                "rope_theta": 10000.0,
+            },
+        )
+        logits, change_logits = model(torch.zeros(2, 7, 5))
+        self.assertEqual(tuple(logits.shape), (2, 3))
+        self.assertEqual(tuple(change_logits.shape), (2,))
 
     def test_transformer_dependency_is_guarded(self) -> None:
         try:

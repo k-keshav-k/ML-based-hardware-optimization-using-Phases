@@ -2,7 +2,7 @@
 
 This module adds a PARSEC-only phase classification and prediction pipeline on top of the repository's existing `perf` interval traces.
 
-The pipeline works on hosts where `kernel.perf_event_paranoid=2` by using task-local `perf stat` data. On hosts where `kernel.perf_event_paranoid=0` allows system-wide perf, it can collect logical-CPU streams with `perf stat -a -A -C` and merge SMT siblings into physical-core streams. Intel uncore IMC read/write counters can also be attached as real shared-memory traffic context when available. The schema keeps `collection_scope`, `collection_unit_type`, `cpu_or_core_id`, and optional `physical_core_id` fields so downstream labeling, baselines, transformer training, and evaluation use the same data contract in task-local and true per-core modes.
+The pipeline works on hosts where `kernel.perf_event_paranoid=2` by using task-local `perf stat` data. On hosts where `kernel.perf_event_paranoid=0` allows system-wide perf, it can collect logical-CPU streams with `perf stat -a -A -C` and merge SMT siblings into physical-core streams. Intel uncore IMC read/write counters can also be attached as real shared-memory traffic context when available. The schema keeps `collection_scope`, `collection_unit_type`, `cpu_or_core_id`, and optional `physical_core_id` fields so downstream labeling, baselines, phase-LM teacher training, and evaluation use the same data contract in task-local and true per-core modes.
 
 ## Collection
 
@@ -133,7 +133,7 @@ uv run -m phase_ml.label_phases \
 
 ## Train And Evaluate
 
-For a fair model comparison, build the dataset, labels, baselines, and transformer with the same config. The A100 config uses a longer sequence length than the default config, so regenerate the baselines with `config/phase_ml_a100.json` before comparing against the transformer.
+For a fair model comparison, build the dataset, labels, baselines, and phase-LM teacher with the same config. The A100 config uses a longer sequence length than the default config, so regenerate the baselines with `config/phase_ml_a100.json` before comparing against the teacher.
 
 Classical baselines with the default local config:
 
@@ -145,7 +145,7 @@ uv run -m phase_ml.train_baselines \
   --config config/phase_ml_defaults.json
 ```
 
-Transformer teacher and compact decision-tree student on the A100 machine:
+RoPE phase-LM teacher and compact decision-tree student on the A100 machine:
 
 ```bash
 uv sync --extra phase-ml
@@ -206,4 +206,4 @@ PHASE_ML_CONFIG=config/phase_ml_indep_a100.json \
 sbatch scripts/slurm/train_phase_ml_transformer.sbatch
 ```
 
-The scratch config expects merged intervals at `/scratch/kk6081/indep/processed_phase_ml_core_uncore_large/merged_interval_dataset.csv` and writes dataset, labels, baselines, transformer predictions, student-tree predictions, and evaluation outputs under `/scratch/kk6081/indep/phase_ml_core_uncore_large`.
+The scratch config expects merged intervals at `/scratch/kk6081/indep/processed_phase_ml_core_uncore_large/merged_interval_dataset.csv` and writes dataset, labels, baselines, teacher predictions, student-tree predictions, and evaluation outputs under `/scratch/kk6081/indep/phase_ml_core_uncore_large`.

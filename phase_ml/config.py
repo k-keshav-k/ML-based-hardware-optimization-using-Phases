@@ -53,6 +53,9 @@ DEFAULT_PHASE_ML_CONFIG: dict[str, Any] = {
         "num_heads": 4,
         "ff_dim": 256,
         "dropout": 0.1,
+        "rope_theta": 10000.0,
+        "class_weight_power": 0.5,
+        "change_loss_weight": 0.25,
         "amp_dtype": "bf16",
     },
     "student": {
