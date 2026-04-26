@@ -2,7 +2,7 @@
   "dataset": {
     "sequence_length": 32,
     "stride": 1,
-    "prediction_horizon": 20
+    "prediction_horizon": 5
   },
   "baselines": {
     "logistic_epochs": 240,
@@ -19,7 +19,7 @@
     "ff_dim": 256,
     "dropout": 0.1,
     "rope_theta": 10000.0,
-    "class_weight_power": 0.5,
+    "class_weight_power": 0.0,
     "change_loss_weight": 0.25,
     "amp_dtype": "bf16"
   },

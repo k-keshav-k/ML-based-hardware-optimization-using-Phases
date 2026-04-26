@@ -16,7 +16,7 @@ DEFAULT_PHASE_ML_CONFIG: dict[str, Any] = {
         "output_dir": str(PROJECT_ROOT / "results" / "phase_ml" / "dataset"),
         "sequence_length": 16,
         "stride": 1,
-        "prediction_horizon": 20,
+        "prediction_horizon": 5,
     },
     "labeling": {
         "method": "fgmm",
@@ -54,7 +54,7 @@ DEFAULT_PHASE_ML_CONFIG: dict[str, Any] = {
         "ff_dim": 256,
         "dropout": 0.1,
         "rope_theta": 10000.0,
-        "class_weight_power": 0.5,
+        "class_weight_power": 0.0,
         "change_loss_weight": 0.25,
         "amp_dtype": "bf16",
     },

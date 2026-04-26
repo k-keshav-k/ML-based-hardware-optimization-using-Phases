@@ -64,7 +64,11 @@ def main() -> None:
     eval_mask = split != "train"
     if not np.any(eval_mask):
         eval_mask = np.ones(split.shape[0], dtype=bool)
+    val_mask = split == "val"
+    if not np.any(val_mask):
+        val_mask = eval_mask
     train_indices = np.where(train_mask)[0]
+    val_indices = np.where(val_mask)[0]
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     phase_count = int(max((int(np.max(y)) + 1) if y.size else 1, int(label_model.get("phase_count", 1))))
     model = build_model(x.shape[-1], phase_count, config["transformer"]).to(device)
@@ -92,8 +96,12 @@ def main() -> None:
     amp_enabled = device.type == "cuda"
     amp_dtype = torch.bfloat16 if str(config["transformer"].get("amp_dtype", "bf16")) == "bf16" else torch.float16
     history_rows = []
+    validation_rows = []
     train_started = time.perf_counter()
     global_step = 0
+    best_val_accuracy = -1.0
+    best_epoch = 0
+    best_state = None
     print(
         f"[transformer] device={device} train_windows={train_indices.size} eval_windows={int(np.sum(eval_mask))} "
         f"epochs={epochs} batch_size={batch_size} steps_per_epoch={steps_per_epoch}",
@@ -148,9 +156,64 @@ def main() -> None:
                     f"elapsed={elapsed/60.0:.1f}m eta={eta/60.0:.1f}m",
                     file=sys.stderr,
                     flush=True,
-                )
+            )
         mean_epoch_loss = sum(epoch_losses) / len(epoch_losses) if epoch_losses else 0.0
-        print(f"[transformer] epoch {epoch_index}/{epochs} mean_loss={mean_epoch_loss:.6f}", file=sys.stderr, flush=True)
+        model.eval()
+        val_losses = []
+        val_next_losses = []
+        val_change_losses = []
+        val_correct = 0
+        val_change_correct = 0
+        val_seen = 0
+        with torch.no_grad():
+            for start in range(0, val_indices.size, max(1, eval_batch_size)):
+                idx = val_indices[start : start + eval_batch_size]
+                xb = torch.tensor(x[idx], dtype=torch.float32, device=device)
+                yb = torch.tensor(y[idx], dtype=torch.long, device=device)
+                cb = torch.tensor(change[idx], dtype=torch.float32, device=device)
+                with torch.autocast(device_type=device.type, dtype=amp_dtype, enabled=amp_enabled):
+                    logits, change_logits = model(xb)
+                    next_loss = ce(logits, yb)
+                    change_loss = bce(change_logits, cb)
+                    loss = next_loss + change_loss_weight * change_loss
+                pred = logits.argmax(dim=1)
+                pred_change = torch.sigmoid(change_logits) >= 0.5
+                val_correct += int((pred == yb).sum().detach().cpu())
+                val_change_correct += int((pred_change == cb.bool()).sum().detach().cpu())
+                val_seen += int(yb.numel())
+                val_losses.append(float(loss.detach().cpu()))
+                val_next_losses.append(float(next_loss.detach().cpu()))
+                val_change_losses.append(float(change_loss.detach().cpu()))
+        val_accuracy = val_correct / max(1, val_seen)
+        val_change_accuracy = val_change_correct / max(1, val_seen)
+        mean_val_loss = sum(val_losses) / len(val_losses) if val_losses else 0.0
+        validation_rows.append(
+            {
+                "epoch": epoch_index,
+                "loss": mean_val_loss,
+                "next_phase_loss": sum(val_next_losses) / len(val_next_losses) if val_next_losses else 0.0,
+                "phase_change_loss": sum(val_change_losses) / len(val_change_losses) if val_change_losses else 0.0,
+                "accuracy": val_accuracy,
+                "phase_change_accuracy": val_change_accuracy,
+                "samples": val_seen,
+            }
+        )
+        if val_accuracy > best_val_accuracy:
+            best_val_accuracy = val_accuracy
+            best_epoch = epoch_index
+            best_state = {key: value.detach().cpu().clone() for key, value in model.state_dict().items()}
+        print(
+            f"[transformer] epoch {epoch_index}/{epochs} mean_loss={mean_epoch_loss:.6f} "
+            f"val_loss={mean_val_loss:.6f} val_acc={val_accuracy:.4f} "
+            f"val_change_acc={val_change_accuracy:.4f}",
+            file=sys.stderr,
+            flush=True,
+        )
+
+    if best_state is not None:
+        model.load_state_dict(best_state)
+        model.to(device)
+        print(f"[transformer] restored best epoch={best_epoch} val_acc={best_val_accuracy:.4f}", file=sys.stderr, flush=True)
 
     # Emit predictions in mini-batches to avoid GPU OOM on large datasets.
     model.eval()
@@ -171,6 +234,11 @@ def main() -> None:
         output_dir / "training_history.csv",
         history_rows,
         ["epoch", "step", "global_step", "batch_size", "loss", "next_phase_loss", "phase_change_loss", "elapsed_s", "eta_s"],
+    )
+    write_csv_rows(
+        output_dir / "validation_history.csv",
+        validation_rows,
+        ["epoch", "loss", "next_phase_loss", "phase_change_loss", "accuracy", "phase_change_accuracy", "samples"],
     )
     prediction_rows = []
     for row, true_phase, predicted, true_change, predicted_change in zip(labels, y, pred, change.astype(int), pred_change):
@@ -204,6 +272,9 @@ def main() -> None:
             "train_windows": int(train_indices.size),
             "eval_windows": int(np.sum(eval_mask)),
             "training_steps": int(global_step),
+            "best_epoch": int(best_epoch),
+            "best_validation_accuracy": float(best_val_accuracy),
+            "validation_history_csv": str(output_dir / "validation_history.csv"),
             "final_training_loss": float(history_rows[-1]["loss"]) if history_rows else 0.0,
             "training_history_csv": str(output_dir / "training_history.csv"),
             "inference_ms_total": elapsed_ms,

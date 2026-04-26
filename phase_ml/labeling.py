@@ -185,7 +185,7 @@ def label_dataset(dataset_dir: Path, output_dir: Path, config: dict[str, object]
             seed,
         )
     labels, changed, model_payload = fit_predict_labels(rows, feature_columns, config, split_by_run, seed)
-    horizon = int(manifest.get("prediction_horizon", 20))
+    horizon = int(manifest.get("prediction_horizon", 5))
     interval_label_rows = add_interval_targets(rows, labels, changed, split_by_run, horizon)
     window_label_rows = add_window_targets(load_csv_rows(dataset_dir / "window_metadata.csv"), interval_label_rows)
     write_csv_rows(output_dir / "interval_labels.csv", interval_label_rows)
