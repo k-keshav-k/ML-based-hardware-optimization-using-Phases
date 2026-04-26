@@ -89,7 +89,8 @@ uv run -m phase_ml.train_baselines \
 uv run -m phase_ml.train_transformer \
   --config \${PHASE_ML_CONFIG} \
   \${DATASET_OUTPUT_DIR:+--dataset-dir \${DATASET_OUTPUT_DIR}} \
-  --log-every \${TRANSFORMER_LOG_EVERY:-1}
+  --log-every \${TRANSFORMER_LOG_EVERY:-1} \
+  --eval-batch-size \${TRANSFORMER_EVAL_BATCH_SIZE:-1024}
 
 uv run -m phase_ml.train_student_tree \
   --config \${PHASE_ML_CONFIG} \

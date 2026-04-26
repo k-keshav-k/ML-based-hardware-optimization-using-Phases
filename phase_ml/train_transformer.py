@@ -31,6 +31,12 @@ def main() -> None:
     parser.add_argument("--label-dir", default="")
     parser.add_argument("--output-dir", default="")
     parser.add_argument("--log-every", type=int, default=1, help="Print transformer loss every N training steps.")
+    parser.add_argument(
+        "--eval-batch-size",
+        type=int,
+        default=0,
+        help="Batch size for prediction export after training (0 -> use training batch_size).",
+    )
     args = parser.parse_args()
     torch, nn = require_torch()
     config = load_config(args.config or None)
@@ -65,6 +71,7 @@ def main() -> None:
     ce = nn.CrossEntropyLoss()
     bce = nn.BCEWithLogitsLoss()
     batch_size = int(config["transformer"].get("batch_size", 256))
+    eval_batch_size = int(args.eval_batch_size or batch_size)
     epochs = int(config["transformer"].get("epochs", 8))
     train_indices = np.where(train_mask)[0]
     steps_per_epoch = int(math.ceil(train_indices.size / max(1, batch_size)))
@@ -132,15 +139,19 @@ def main() -> None:
         mean_epoch_loss = sum(epoch_losses) / len(epoch_losses) if epoch_losses else 0.0
         print(f"[transformer] epoch {epoch_index}/{epochs} mean_loss={mean_epoch_loss:.6f}", file=sys.stderr, flush=True)
 
-    # Run a full forward pass to emit predictions that downstream scripts
-    # evaluate with the same schema as baseline models.
+    # Emit predictions in mini-batches to avoid GPU OOM on large datasets.
     model.eval()
     start_time = time.perf_counter()
+    pred_parts: list[np.ndarray] = []
+    pred_change_parts: list[np.ndarray] = []
     with torch.no_grad():
-        xb = torch.tensor(x, dtype=torch.float32, device=device)
-        logits, change_logits = model(xb)
-        pred = logits.argmax(dim=1).cpu().numpy()
-        pred_change = (torch.sigmoid(change_logits) >= 0.5).cpu().numpy().astype(int)
+        for start in range(0, x.shape[0], max(1, eval_batch_size)):
+            xb = torch.tensor(x[start : start + eval_batch_size], dtype=torch.float32, device=device)
+            logits, change_logits = model(xb)
+            pred_parts.append(logits.argmax(dim=1).cpu().numpy())
+            pred_change_parts.append((torch.sigmoid(change_logits) >= 0.5).cpu().numpy().astype(int))
+    pred = np.concatenate(pred_parts, axis=0) if pred_parts else np.zeros(0, dtype=int)
+    pred_change = np.concatenate(pred_change_parts, axis=0) if pred_change_parts else np.zeros(0, dtype=int)
     elapsed_ms = (time.perf_counter() - start_time) * 1000.0
     torch.save(model.state_dict(), output_dir / "transformer.pt")
     write_csv_rows(
@@ -172,6 +183,7 @@ def main() -> None:
             "phase_count": phase_count,
             "epochs": epochs,
             "batch_size": batch_size,
+            "eval_batch_size": eval_batch_size,
             "train_windows": int(train_indices.size),
             "eval_windows": int(np.sum(eval_mask)),
             "training_steps": int(global_step),
