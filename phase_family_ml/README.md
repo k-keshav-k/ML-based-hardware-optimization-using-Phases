@@ -113,14 +113,14 @@ These commands are useful for debugging individual stages.
 python -m phase_family_ml.build_counter_sequences \
   --config config/phase_family_ml_defaults.json \
   --input results/processed_phase_family_ml_large/merged_interval_dataset.csv \
-  --output-dir results/phase_family_ml/counter_sequences \
+  --output-dir /scratch/kk6081/results/phase_family_ml/counter_sequences \
   --experiment-mode config_group_holdout
 
 python -m phase_family_ml.run_ablation \
   --config config/phase_family_ml_defaults.json \
   --input results/processed_phase_family_ml_large/merged_interval_dataset.csv \
-  --sequences-root results/phase_family_ml/counter_sequences \
-  --output-dir results/phase_family_ml/ablation
+  --sequences-root /scratch/kk6081/results/phase_family_ml/counter_sequences \
+  --output-dir /scratch/kk6081/results/phase_family_ml/ablation
 
 python -m phase_family_ml.train_teacher \
   --config config/phase_family_ml_defaults.json \
