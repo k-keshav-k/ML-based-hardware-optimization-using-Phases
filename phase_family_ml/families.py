@@ -11,7 +11,7 @@ from dataclasses import dataclass
 
 from hpc_phase_analysis.io_utils import safe_float
 
-# Keep the policy aligned with the existing phase_ml constraints.
+# Keep timing-derived counters out of family modeling.
 FORBIDDEN_PARTS = [
     "cycle",
     "ipc",

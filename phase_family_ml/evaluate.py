@@ -15,7 +15,7 @@ from .orchestration import experiment_dirs, scopes_for_experiment
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--config", default="")
-    parser.add_argument("--labels-root", default="")
+    parser.add_argument("--sequences-root", default="")
     parser.add_argument("--teacher-root", default="")
     parser.add_argument("--students-root", default="")
     parser.add_argument("--ablation-dir", default="")
@@ -24,7 +24,7 @@ def main() -> None:
 
     config = load_config(args.config or None)
     dataset_cfg = config["dataset"]
-    labels_root = Path(args.labels_root or (Path(dataset_cfg["output_dir"]) / "family_labels"))
+    sequences_root = Path(args.sequences_root or (Path(dataset_cfg["output_dir"]) / "counter_sequences"))
     teacher_root = Path(args.teacher_root or (Path(dataset_cfg["output_dir"]) / "teacher"))
     students_root = Path(args.students_root or (Path(dataset_cfg["output_dir"]) / "students"))
     ablation_dir = Path(args.ablation_dir or (Path(dataset_cfg["output_dir"]) / "ablation"))
@@ -36,7 +36,7 @@ def main() -> None:
     hw_rows: list[dict[str, str]] = []
     ablation_path = ablation_dir / "family_ablation_results.csv"
 
-    for exp_dir in experiment_dirs(labels_root):
+    for exp_dir in experiment_dirs(sequences_root):
         for scope in scopes_for_experiment(exp_dir):
             teacher_predictions = teacher_root / exp_dir.name / scope / "teacher_predictions.csv"
             student_predictions = students_root / exp_dir.name / scope / "student_predictions.csv"

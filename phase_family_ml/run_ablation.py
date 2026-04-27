@@ -16,19 +16,19 @@ def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--config", default="")
     parser.add_argument("--input", default="")
-    parser.add_argument("--labels-root", default="")
+    parser.add_argument("--sequences-root", default="")
     parser.add_argument("--output-dir", default="")
     parser.add_argument("--full", action="store_true")
     args = parser.parse_args()
 
     config = apply_runtime_profile(load_config(args.config or None), full=args.full)
     dataset_cfg = config["dataset"]
-    labels_root = Path(args.labels_root or (Path(dataset_cfg["output_dir"]) / "family_labels"))
+    sequences_root = Path(args.sequences_root or (Path(dataset_cfg["output_dir"]) / "counter_sequences"))
     output_dir = Path(args.output_dir or (Path(dataset_cfg["output_dir"]) / "ablation"))
     output_dir.mkdir(parents=True, exist_ok=True)
 
     all_rows: list[dict[str, object]] = []
-    for exp_dir in experiment_dirs(labels_root):
+    for exp_dir in experiment_dirs(sequences_root):
         for scope in scopes_for_experiment(exp_dir):
             temp_csv = output_dir / f"ablation_{exp_dir.name}_{scope}.csv"
             rows = run_ablation(

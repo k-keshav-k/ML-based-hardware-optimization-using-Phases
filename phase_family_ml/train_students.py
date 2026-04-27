@@ -15,20 +15,20 @@ from .students import train_students_for_experiment
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--config", default="")
-    parser.add_argument("--labels-root", default="")
+    parser.add_argument("--sequences-root", default="")
     parser.add_argument("--teacher-root", default="")
     parser.add_argument("--output-dir", default="")
     args = parser.parse_args()
 
     config = load_config(args.config or None)
     dataset_cfg = config["dataset"]
-    labels_root = Path(args.labels_root or (Path(dataset_cfg["output_dir"]) / "family_labels"))
+    sequences_root = Path(args.sequences_root or (Path(dataset_cfg["output_dir"]) / "counter_sequences"))
     teacher_root = Path(args.teacher_root or (Path(dataset_cfg["output_dir"]) / "teacher"))
     output_root = Path(args.output_dir or (Path(dataset_cfg["output_dir"]) / "students"))
     output_root.mkdir(parents=True, exist_ok=True)
 
     all_rows: list[dict[str, object]] = []
-    for exp_dir in experiment_dirs(labels_root):
+    for exp_dir in experiment_dirs(sequences_root):
         for scope in scopes_for_experiment(exp_dir):
             teacher_predictions = teacher_root / exp_dir.name / scope / "teacher_predictions.csv"
             if not teacher_predictions.exists():

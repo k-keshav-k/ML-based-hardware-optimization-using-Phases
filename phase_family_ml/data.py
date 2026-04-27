@@ -1,4 +1,4 @@
-"""Shared data-loading helpers for family label artifacts."""
+"""Shared data-loading helpers for counter sequence artifacts."""
 
 from __future__ import annotations
 
@@ -13,8 +13,8 @@ from .families import FAMILY_COUNTERS
 
 
 @dataclass
-class FamilyLabelData:
-    """In-memory view of one family label CSV."""
+class CounterSequenceData:
+    """In-memory view of one family counter sequence CSV."""
 
     rows: list[dict[str, str]]
     family_state: np.ndarray
@@ -22,8 +22,8 @@ class FamilyLabelData:
     split: np.ndarray
 
 
-def load_family_labels(path: Path, horizon: int) -> FamilyLabelData:
-    """Load one family label artifact and materialize numeric arrays."""
+def load_counter_sequence(path: Path, horizon: int) -> CounterSequenceData:
+    """Load one family counter sequence artifact and materialize numeric arrays."""
 
     rows = load_csv_rows(path)
     family_state = np.asarray([int(row.get("family_state", "-1") or -1) for row in rows], dtype=int)
@@ -37,22 +37,22 @@ def load_family_labels(path: Path, horizon: int) -> FamilyLabelData:
         # like `future_states[:, 0]` remains valid.
         future_states = np.empty((0, horizon), dtype=int)
     split = np.asarray([row.get("split", "train") for row in rows])
-    return FamilyLabelData(rows=rows, family_state=family_state, future_states=future_states, split=split)
+    return CounterSequenceData(rows=rows, family_state=family_state, future_states=future_states, split=split)
 
 
-def load_scope_family_data(experiment_dir: Path, scope: str, horizon: int) -> dict[str, FamilyLabelData]:
-    """Load all family label files for one experiment/scope pair."""
+def load_scope_family_data(experiment_dir: Path, scope: str, horizon: int) -> dict[str, CounterSequenceData]:
+    """Load all family counter sequence files for one experiment/scope pair."""
 
     scope_dir = experiment_dir / f"threshold_{scope}"
-    output: dict[str, FamilyLabelData] = {}
+    output: dict[str, CounterSequenceData] = {}
     for family in FAMILY_COUNTERS:
-        path = scope_dir / f"family_labels_{family}.csv"
+        path = scope_dir / f"counter_sequence_{family}.csv"
         if path.exists():
-            output[family] = load_family_labels(path, horizon)
+            output[family] = load_counter_sequence(path, horizon)
     return output
 
 
-def shared_row_count(data_by_family: dict[str, FamilyLabelData]) -> int:
+def shared_row_count(data_by_family: dict[str, CounterSequenceData]) -> int:
     """Return the row count that all loaded families share."""
 
     if not data_by_family:
@@ -60,14 +60,14 @@ def shared_row_count(data_by_family: dict[str, FamilyLabelData]) -> int:
     return min(len(data.rows) for data in data_by_family.values())
 
 
-def states_matrix(data_by_family: dict[str, FamilyLabelData], horizon: int) -> tuple[list[str], np.ndarray, np.ndarray, np.ndarray, list[dict[str, str]]]:
+def states_matrix(data_by_family: dict[str, CounterSequenceData], horizon: int) -> tuple[list[str], np.ndarray, np.ndarray, np.ndarray, list[dict[str, str]]]:
     """Assemble aligned state/future tensors across families.
 
     Returns
     - family names in matrix order
     - current states shape [N, F]
     - future states shape [N, F, H]
-    - split labels shape [N]
+    - split names shape [N]
     - metadata rows (from the first family)
     """
 

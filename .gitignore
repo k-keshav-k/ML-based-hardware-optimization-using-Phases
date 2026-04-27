@@ -12,23 +12,12 @@ __pycache__/
 key
 key.pub
 
-# Logs: keep directory, ignore generated job output
+# Slurm/log output
 logs/*
-!logs/.gitkeep
 
-# Generated experiment, analysis, and report artifacts
+# Generated pipeline outputs
 results/*
 !results/.gitkeep
-
-# Build outputs
-synthetic_workloads/bin/
-
-# LaTeX intermediate files
-*.aux
-*.fdb_latexmk
-*.fls
-*.log
-*.synctex.gz
 
 # Repo-local third-party checkouts are bootstrapped by scripts/setup_parsec.py
 third_party/

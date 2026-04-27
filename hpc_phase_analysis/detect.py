@@ -98,29 +98,6 @@ def discover_parsec() -> dict[str, object]:
     return {"available": False, "root": "", "parsecmgmt": "", "benchmarks": []}
 
 
-def discover_spec() -> dict[str, object]:
-    candidates = []
-    if os.environ.get("SPEC2017_DIR"):
-        candidates.append(Path(os.environ["SPEC2017_DIR"]))
-    candidates.extend([Path("/opt/spec2017"), Path.home() / "cpu2017"])
-    runcpu_path = shutil.which("runcpu")
-    if runcpu_path:
-        candidates.append(Path(runcpu_path).resolve().parents[1])
-    for root in candidates:
-        runcpu = root / "bin" / "runcpu"
-        benchspec = root / "benchspec" / "CPU"
-        if runcpu.exists():
-            benchmarks = [item.name for item in sorted(benchspec.glob("*")) if item.is_dir()] if benchspec.exists() else []
-            return {
-                "available": True,
-                "root": str(root),
-                "runcpu": str(runcpu),
-                "benchmarks": benchmarks,
-                "note": "SPEC CPU2017 usually requires a site-specific config file; pass --spec-config when running workloads.",
-            }
-    return {"available": False, "root": "", "runcpu": "", "benchmarks": [], "note": ""}
-
-
 def detect_platform() -> dict[str, object]:
     lscpu = run_command(["lscpu"])
     lscpu_data = parse_key_value_lines(lscpu.stdout)
@@ -180,7 +157,6 @@ def detect_platform() -> dict[str, object]:
             "path": pcm_path,
         },
         "parsec": discover_parsec(),
-        "spec2017": discover_spec(),
         "lscpu_raw": lscpu.stdout,
     }
 

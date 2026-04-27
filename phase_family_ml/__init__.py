@@ -1,13 +1,13 @@
 """Factorized family-wise phase language modeling pipeline.
 
-This package is intentionally separate from ``phase_ml`` so we can evolve
-family-specific modeling without changing the original pipeline modules.
+This package owns the counter-family flow from collection through distillation.
 """
 
 from __future__ import annotations
 
 __all__ = [
     "ablation",
+    "build_counter_sequences",
     "collect",
     "config",
     "evaluation",
@@ -16,5 +16,6 @@ __all__ = [
     "splits",
     "students",
     "teacher",
+    "tree",
     "transformer_model",
 ]

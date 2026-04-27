@@ -16,7 +16,7 @@ from phase_family_ml.families import FAMILY_COUNTERS, assert_no_forbidden_counte
 from phase_family_ml.labels import (
     _bucketize,
     _tertiles,
-    build_family_labels,
+    build_counter_sequences,
     family_usage_scores,
     parsec_rows,
     states_for_scope,
@@ -25,7 +25,7 @@ from phase_family_ml.labels import (
 from phase_family_ml.students import LookupBackoffModel
 from phase_family_ml.teacher import train_teachers_for_experiment
 from phase_family_ml.transformer_model import build_family_transformer, require_torch
-from scripts.run_workloads import events_for_profile, phase_family_lm_readiness
+from phase_family_ml.collect import family_lm_events, family_lm_readiness
 
 
 HEADER = [
@@ -117,10 +117,10 @@ class PhaseFamilyMLTests(unittest.TestCase):
             "l2_misses": {"supported": True, "collection_scope": "task_local", "analysis_confident": True, "selected_event": "l2_rqsts.miss"},
             "fp_arithmetic": {"supported": True, "collection_scope": "task_local", "analysis_confident": True, "selected_event": "fp_arith_inst_retired.scalar_double"},
         }
-        events = events_for_profile(alias_map, "phase_family_lm")
+        events = family_lm_events(alias_map)
         self.assertIn("inst_retired.any", events)
         self.assertIn("l2_rqsts.miss", events)
-        self.assertTrue(phase_family_lm_readiness(alias_map)[0])
+        self.assertTrue(family_lm_readiness(alias_map)[0])
 
     def test_train_only_thresholds_and_bucketization(self) -> None:
         rows = [
@@ -136,14 +136,14 @@ class PhaseFamilyMLTests(unittest.TestCase):
         # Train tertiles come from [1,2], so test values are high bucket.
         self.assertEqual(states.tolist(), [0, 2, 2, 2])
 
-    def test_family_label_file_schema(self) -> None:
+    def test_counter_sequence_file_schema(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             merged = root / "merged.csv"
             write_fixture(merged)
-            summaries = build_family_labels(
+            summaries = build_counter_sequences(
                 input_csv=merged,
-                output_root=root / "labels",
+                output_root=root / "sequences",
                 horizon=20,
                 threshold_mode="global",
                 experiment_mode="pooled_run_group",
@@ -152,8 +152,8 @@ class PhaseFamilyMLTests(unittest.TestCase):
                 seed=7,
             )
             self.assertEqual(len(summaries), 1)
-            label_path = root / "labels" / "pooled_run_group" / "threshold_global" / "family_labels_L1.csv"
-            rows = load_csv_rows(label_path)
+            sequence_path = root / "sequences" / "pooled_run_group" / "threshold_global" / "counter_sequence_L1.csv"
+            rows = load_csv_rows(sequence_path)
             self.assertTrue(rows)
             first = rows[0]
             self.assertIn("family_state", first)
@@ -164,16 +164,20 @@ class PhaseFamilyMLTests(unittest.TestCase):
             self.assertIn("workload", first)
             self.assertIn("run_id", first)
             self.assertIn("core_id", first)
+            counter_rows = load_csv_rows(sequence_path.parent / "counter_value_sequences" / "counter_sequence_counter__branch_mispredictions.csv")
+            self.assertTrue(counter_rows)
+            self.assertIn("counter_value", counter_rows[0])
+            self.assertIn("future_counter_value_20", counter_rows[0])
 
-    def test_labels_use_ablation_selected_counters_for_teacher_states(self) -> None:
+    def test_sequences_use_ablation_selected_counters_for_teacher_inputs(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             merged = root / "merged.csv"
             write_fixture(merged)
 
-            build_family_labels(
+            build_counter_sequences(
                 input_csv=merged,
-                output_root=root / "labels_default",
+                output_root=root / "sequences_default",
                 horizon=20,
                 threshold_mode="global",
                 experiment_mode="pooled_run_group",
@@ -181,11 +185,11 @@ class PhaseFamilyMLTests(unittest.TestCase):
                 val_fraction=0.15,
                 seed=7,
             )
-            default_rows = load_csv_rows(root / "labels_default" / "pooled_run_group" / "threshold_global" / "family_labels_core_fp.csv")
+            default_rows = load_csv_rows(root / "sequences_default" / "pooled_run_group" / "threshold_global" / "counter_sequence_core_fp.csv")
             default_states = [int(row.get("family_state", "-1") or -1) for row in default_rows]
 
             # Provide one selected counter per family exactly as the ablation output
-            # schema does, then rebuild labels from that selection.
+            # schema does, then rebuild sequences from that selection.
             write_csv_rows(
                 root / "ablation.csv",
                 [
@@ -198,9 +202,9 @@ class PhaseFamilyMLTests(unittest.TestCase):
                 ],
             )
 
-            build_family_labels(
+            build_counter_sequences(
                 input_csv=merged,
-                output_root=root / "labels_selected",
+                output_root=root / "sequences_selected",
                 horizon=20,
                 threshold_mode="global",
                 experiment_mode="pooled_run_group",
@@ -209,25 +213,70 @@ class PhaseFamilyMLTests(unittest.TestCase):
                 seed=7,
                 ablation_results=root / "ablation.csv",
             )
-            selected_rows = load_csv_rows(root / "labels_selected" / "pooled_run_group" / "threshold_global" / "family_labels_core_fp.csv")
+            selected_rows = load_csv_rows(root / "sequences_selected" / "pooled_run_group" / "threshold_global" / "counter_sequence_core_fp.csv")
             selected_states = [int(row.get("family_state", "-1") or -1) for row in selected_rows]
 
             self.assertEqual(len(default_states), len(selected_states))
             self.assertTrue(any(a != b for a, b in zip(default_states, selected_states)))
 
-            summary_rows = load_csv_rows(root / "labels_selected" / "pooled_run_group" / "family_label_summary.csv")
+            summary_rows = load_csv_rows(root / "sequences_selected" / "pooled_run_group" / "counter_sequence_summary.csv")
             core_row = next(row for row in summary_rows if row.get("family", "") == "core_fp" and row.get("scope", "") == "global")
-            self.assertEqual(core_row.get("label_source", ""), "ablation_selected")
+            self.assertEqual(core_row.get("sequence_source", ""), "ablation_selected")
             self.assertEqual(core_row.get("selected_counters", ""), "counter__fp_arithmetic")
+            selected_first = selected_rows[0]
+            self.assertEqual(selected_first.get("selected_counter", ""), "counter__fp_arithmetic")
+            self.assertIn("counter_value", selected_first)
+            self.assertIn("future_counter_value_20", selected_first)
+
+    def test_sequences_prefer_global_one_per_family_selection(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            merged = root / "merged.csv"
+            write_fixture(merged)
+            write_csv_rows(
+                root / "ablation.csv",
+                [
+                    {"experiment": "pooled_run_group", "scope": "global", "family": "L1", "candidate_type": "singleton", "counter_set": "counter__l1d_stores", "selected": 1, "validation_score": 0.8},
+                    {"experiment": "pooled_run_group", "scope": "global", "family": "LLC", "candidate_type": "singleton", "counter_set": "counter__llc_misses", "selected": 1, "validation_score": 0.8},
+                    {"experiment": "pooled_run_group", "scope": "global", "family": "memory_offcore", "candidate_type": "singleton", "counter_set": "counter__total_memory_bandwidth", "selected": 1, "validation_score": 0.8},
+                    {"experiment": "pooled_run_group", "scope": "global", "family": "branch_control", "candidate_type": "singleton", "counter_set": "counter__branch_mispredictions", "selected": 1, "validation_score": 0.8},
+                    {"experiment": "pooled_run_group", "scope": "global", "family": "core_fp", "candidate_type": "singleton", "counter_set": "counter__fp_arithmetic", "selected": 1, "validation_score": 0.8},
+                    {
+                        "experiment": "pooled_run_group",
+                        "scope": "global",
+                        "family": "__global__",
+                        "candidate_type": "one_per_family_exhaustive",
+                        "counter_set": "counter__l1d_loads,counter__l2_misses,counter__llc_references,counter__offcore_demand_data_reads,counter__branch_instructions,counter__instructions_retired",
+                        "family_counter_map": "L1:counter__l1d_loads;L2:counter__l2_misses;LLC:counter__llc_references;memory_offcore:counter__offcore_demand_data_reads;branch_control:counter__branch_instructions;core_fp:counter__instructions_retired",
+                        "selected": 1,
+                        "validation_score": 0.9,
+                    },
+                ],
+            )
+            build_counter_sequences(
+                input_csv=merged,
+                output_root=root / "sequences",
+                horizon=20,
+                threshold_mode="global",
+                experiment_mode="pooled_run_group",
+                train_fraction=0.7,
+                val_fraction=0.15,
+                seed=7,
+                ablation_results=root / "ablation.csv",
+            )
+            summary_rows = load_csv_rows(root / "sequences" / "pooled_run_group" / "counter_sequence_summary.csv")
+            core_row = next(row for row in summary_rows if row.get("family", "") == "core_fp" and row.get("scope", "") == "global")
+            self.assertEqual(core_row.get("selected_counters", ""), "counter__instructions_retired")
+            self.assertEqual(core_row.get("sequence_source", ""), "ablation_selected")
 
     def test_ablation_singleton_all_and_global_exhaustive(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             merged = root / "merged.csv"
             write_fixture(merged)
-            build_family_labels(
+            build_counter_sequences(
                 input_csv=merged,
-                output_root=root / "labels",
+                output_root=root / "sequences",
                 horizon=20,
                 threshold_mode="global",
                 experiment_mode="pooled_run_group",
@@ -237,7 +286,7 @@ class PhaseFamilyMLTests(unittest.TestCase):
             )
             rows = run_ablation(
                 input_csv=merged,
-                experiment_dir=root / "labels" / "pooled_run_group",
+                experiment_dir=root / "sequences" / "pooled_run_group",
                 scope="global",
                 horizon=20,
                 output_csv=root / "ablation.csv",
@@ -286,9 +335,9 @@ class PhaseFamilyMLTests(unittest.TestCase):
             root = Path(tmp)
             merged = root / "merged.csv"
             write_fixture(merged)
-            build_family_labels(
+            build_counter_sequences(
                 input_csv=merged,
-                output_root=root / "labels",
+                output_root=root / "sequences",
                 horizon=20,
                 threshold_mode="global",
                 experiment_mode="pooled_run_group",
@@ -297,7 +346,7 @@ class PhaseFamilyMLTests(unittest.TestCase):
                 seed=7,
             )
             rows = train_teachers_for_experiment(
-                experiment_dir=root / "labels" / "pooled_run_group",
+                experiment_dir=root / "sequences" / "pooled_run_group",
                 scope="global",
                 output_dir=root / "teacher",
                 horizon=20,

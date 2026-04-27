@@ -10,10 +10,6 @@ import re
 import subprocess
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Iterable
-
-import numpy as np
-
 
 def ensure_dir(path: Path) -> Path:
     path.mkdir(parents=True, exist_ok=True)
@@ -86,26 +82,6 @@ def safe_int(value: object, default: int = 0) -> int:
         return default
 
 
-def safe_div(numerator: float, denominator: float, scale: float = 1.0) -> float:
-    if denominator in (0, 0.0) or math.isnan(denominator):
-        return math.nan
-    if math.isnan(numerator):
-        return math.nan
-    return (numerator / denominator) * scale
-
-
-def quantile_clip(values: np.ndarray, low: float, high: float) -> np.ndarray:
-    clean = values[~np.isnan(values)]
-    if clean.size == 0:
-        return values.copy()
-    lower = np.quantile(clean, low)
-    upper = np.quantile(clean, high)
-    clipped = values.copy()
-    mask = ~np.isnan(clipped)
-    clipped[mask] = np.clip(clipped[mask], lower, upper)
-    return clipped
-
-
 def run_command(command: list[str], cwd: Path | None = None) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
         command,
@@ -116,21 +92,5 @@ def run_command(command: list[str], cwd: Path | None = None) -> subprocess.Compl
     )
 
 
-def render_markdown_table(rows: list[dict[str, object]], columns: list[str]) -> str:
-    header = "| " + " | ".join(columns) + " |"
-    divider = "| " + " | ".join(["---"] * len(columns)) + " |"
-    body = []
-    for row in rows:
-        body.append("| " + " | ".join(str(row.get(column, "")) for column in columns) + " |")
-    return "\n".join([header, divider] + body)
-
-
 def listify_csv_argument(value: str) -> list[str]:
     return [item.strip() for item in value.split(",") if item.strip()]
-
-
-def flatten(iterable: Iterable[Iterable[object]]) -> list[object]:
-    merged: list[object] = []
-    for chunk in iterable:
-        merged.extend(chunk)
-    return merged

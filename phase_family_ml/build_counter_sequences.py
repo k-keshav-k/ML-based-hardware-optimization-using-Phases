@@ -1,4 +1,4 @@
-"""CLI for train-split tertile family label generation."""
+"""CLI for building per-counter sequence artifacts."""
 
 from __future__ import annotations
 
@@ -6,7 +6,7 @@ import argparse
 from pathlib import Path
 
 from .config import load_config
-from .labels import build_family_labels
+from .labels import build_counter_sequences
 
 
 def main() -> None:
@@ -15,6 +15,7 @@ def main() -> None:
     parser.add_argument("--input", default="")
     parser.add_argument("--output-dir", default="")
     parser.add_argument("--ablation-results", default="")
+    parser.add_argument("--require-ablation-coverage", action="store_true")
     parser.add_argument("--horizon", type=int, default=0)
     parser.add_argument("--threshold-mode", choices=["global", "per_workload", "both"], default="")
     parser.add_argument("--experiment-mode", choices=["per_workload_holdout", "pooled_run_group", "leave_one_workload_out", "all"], default="")
@@ -22,8 +23,8 @@ def main() -> None:
 
     config = load_config(args.config or None)
     dataset_cfg = config["dataset"]
-    output_root = Path(args.output_dir or (Path(dataset_cfg["output_dir"]) / "family_labels"))
-    summaries = build_family_labels(
+    output_root = Path(args.output_dir or (Path(dataset_cfg["output_dir"]) / "counter_sequences"))
+    summaries = build_counter_sequences(
         input_csv=Path(args.input or dataset_cfg["input_csv"]),
         output_root=output_root,
         horizon=int(args.horizon or dataset_cfg["horizon"]),
@@ -33,8 +34,9 @@ def main() -> None:
         val_fraction=float(config["splits"]["val_fraction"]),
         seed=int(config["random_seed"]),
         ablation_results=Path(args.ablation_results) if args.ablation_results else None,
+        require_ablation_coverage=bool(args.require_ablation_coverage),
     )
-    print(f"Built family labels for {len(summaries)} experiment split(s).")
+    print(f"Built counter sequences for {len(summaries)} experiment split(s).")
 
 
 if __name__ == "__main__":

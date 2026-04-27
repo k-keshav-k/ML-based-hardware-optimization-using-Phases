@@ -9,8 +9,8 @@
 #SBATCH --requeue
 
 # Single-job SLURM workflow for family-wise transformer teacher training:
-# 1) optionally build/rebuild family label artifacts from merged intervals
-# 2) train RoPE transformer teachers for each family (with context-mode selection)
+# 1) optionally build/rebuild counter sequence artifacts from merged intervals
+# 2) train RoPE transformer teachers from ablation-selected counter streams
 # 3) write teacher summaries/predictions to the configured output directory
 
 singularity exec --bind /scratch --nv \
@@ -30,18 +30,19 @@ export UV_PROJECT_ENVIRONMENT=\${UV_PROJECT_ENVIRONMENT:-.venv}
 
 export PHASE_FAMILY_ML_CONFIG=\${PHASE_FAMILY_ML_CONFIG:-config/phase_family_ml_defaults.json}
 export DATASET_INPUT_CSV=\${DATASET_INPUT_CSV:-}
-export FAMILY_LABELS_ROOT=\${FAMILY_LABELS_ROOT:-}
+export COUNTER_SEQUENCES_ROOT=\${COUNTER_SEQUENCES_ROOT:-}
 export TEACHER_OUTPUT_ROOT=\${TEACHER_OUTPUT_ROOT:-}
 export ABLATION_RESULTS_CSV=\${ABLATION_RESULTS_CSV:-}
 
-# Label-stage controls.
-export SKIP_LABEL_BUILD=\${SKIP_LABEL_BUILD:-auto}   # auto | 0 | 1
-export EXPERIMENT_MODE=\${EXPERIMENT_MODE:-all}
-export THRESHOLD_MODE=\${THRESHOLD_MODE:-both}
+# Sequence-stage controls.
+export SKIP_SEQUENCE_BUILD=\${SKIP_SEQUENCE_BUILD:-auto}   # auto | 0 | 1
+export EXPERIMENT_MODE=\${EXPERIMENT_MODE:-pooled_run_group}
+export THRESHOLD_MODE=\${THRESHOLD_MODE:-global}
+export REQUIRE_ABLATION_MATCH=\${REQUIRE_ABLATION_MATCH:-0}  # retained for compatibility; missing-family coverage now warns instead of failing
 
 # Teacher training controls.
 export FULL=\${FULL:-0}                              # 0 quick profile, 1 full profile
-export SKIP_LABEL_REFRESH=\${SKIP_LABEL_REFRESH:-0}  # 0 rebuild labels from ablation before teacher, 1 skip
+export SKIP_SEQUENCE_REFRESH=\${SKIP_SEQUENCE_REFRESH:-0}  # 0 refresh selected streams before teacher, 1 skip
 
 cd \${PROJECT_DIR:-/scratch/kk6081/Phase-pipeline/ML-based-hardware-optimization-using-Phases}
 mkdir -p logs
@@ -54,59 +55,68 @@ if ! command -v uv >/dev/null 2>&1; then
   exit 1
 fi
 
-uv sync --extra phase-ml
+uv sync --extra teacher
 
 RUN_ROOT=\$(uv run python -c \"import os; from pathlib import Path; from phase_family_ml.config import load_config; c=load_config(os.environ['PHASE_FAMILY_ML_CONFIG']); print(Path(c['dataset']['output_dir']))\")
 mkdir -p \"\${RUN_ROOT}\"
 
-if [[ -z \"\${FAMILY_LABELS_ROOT}\" ]]; then
-  FAMILY_LABELS_ROOT=\"\${RUN_ROOT}/family_labels\"
+if [[ -z \"\${COUNTER_SEQUENCES_ROOT}\" ]]; then
+  COUNTER_SEQUENCES_ROOT=\"\${RUN_ROOT}/counter_sequences_\${EXPERIMENT_MODE}_\${THRESHOLD_MODE}\"
 fi
 if [[ -z \"\${TEACHER_OUTPUT_ROOT}\" ]]; then
-  TEACHER_OUTPUT_ROOT=\"\${RUN_ROOT}/teacher\"
+  TEACHER_OUTPUT_ROOT=\"\${RUN_ROOT}/teacher_\${EXPERIMENT_MODE}_\${THRESHOLD_MODE}\"
 fi
 if [[ -z \"\${ABLATION_RESULTS_CSV}\" ]]; then
   ABLATION_RESULTS_CSV=\"\${RUN_ROOT}/ablation/family_ablation_results.csv\"
 fi
 
-mkdir -p \"\${FAMILY_LABELS_ROOT}\" \"\${TEACHER_OUTPUT_ROOT}\"
+mkdir -p \"\${COUNTER_SEQUENCES_ROOT}\" \"\${TEACHER_OUTPUT_ROOT}\"
 
 echo \"RUN_ROOT=\${RUN_ROOT}\"
 echo \"DATASET_INPUT_CSV=\${DATASET_INPUT_CSV:-<from config>}\"
-echo \"FAMILY_LABELS_ROOT=\${FAMILY_LABELS_ROOT}\"
+echo \"COUNTER_SEQUENCES_ROOT=\${COUNTER_SEQUENCES_ROOT}\"
 echo \"TEACHER_OUTPUT_ROOT=\${TEACHER_OUTPUT_ROOT}\"
 echo \"ABLATION_RESULTS_CSV=\${ABLATION_RESULTS_CSV}\"
-echo \"SKIP_LABEL_BUILD=\${SKIP_LABEL_BUILD}\"
+echo \"SKIP_SEQUENCE_BUILD=\${SKIP_SEQUENCE_BUILD}\"
 echo \"EXPERIMENT_MODE=\${EXPERIMENT_MODE}\"
 echo \"THRESHOLD_MODE=\${THRESHOLD_MODE}\"
 echo \"FULL=\${FULL}\"
-echo \"SKIP_LABEL_REFRESH=\${SKIP_LABEL_REFRESH}\"
+echo \"SKIP_SEQUENCE_REFRESH=\${SKIP_SEQUENCE_REFRESH}\"
+echo \"REQUIRE_ABLATION_MATCH=\${REQUIRE_ABLATION_MATCH}\"
 echo \"PYTHONUNBUFFERED=\${PYTHONUNBUFFERED}\"
 
-if [[ \"\${SKIP_LABEL_BUILD}\" == \"1\" ]] || { [[ \"\${SKIP_LABEL_BUILD}\" == \"auto\" ]] && uv run python -c \"import os; from pathlib import Path; root=Path(os.environ['FAMILY_LABELS_ROOT']); manifests=list(root.glob('*/family_label_manifest.json')); raise SystemExit(0 if manifests else 1)\"; }; then
-  echo 'Using existing family labels; skipping build_family_labels.'
-else
-  # If labels are missing, rebuild from merged interval CSV.
-  label_args=(--config \${PHASE_FAMILY_ML_CONFIG})
-  if [[ -n \"\${DATASET_INPUT_CSV}\" ]]; then
-    label_args+=(--input \${DATASET_INPUT_CSV})
+if [[ \"\${SKIP_SEQUENCE_REFRESH}\" != \"1\" ]]; then
+  if [[ ! -f \"\${ABLATION_RESULTS_CSV}\" ]]; then
+    echo \"Ablation CSV not found at \${ABLATION_RESULTS_CSV}. Set ABLATION_RESULTS_CSV or run ablation first.\" >&2
+    exit 1
   fi
-  label_args+=(--output-dir \${FAMILY_LABELS_ROOT})
-  label_args+=(--experiment-mode \${EXPERIMENT_MODE})
-  label_args+=(--threshold-mode \${THRESHOLD_MODE})
-  uv run -m phase_family_ml.build_family_labels \"\${label_args[@]}\"
+  uv run python -c \"import csv, math, os; from phase_family_ml.families import FAMILY_COUNTERS; p=os.environ['ABLATION_RESULTS_CSV']; e=os.environ['EXPERIMENT_MODE']; s=os.environ['THRESHOLD_MODE']; rows=list(csv.DictReader(open(p,newline=''))); best={};\nfor r in rows:\n  fam=r.get('family','');\n  if fam not in FAMILY_COUNTERS: continue\n  if r.get('experiment','')!=e or r.get('scope','')!=s: continue\n  if r.get('candidate_type','')=='unavailable': continue\n  cset=(r.get('counter_set','') or '').strip()\n  if not cset: continue\n  try: score=float(r.get('validation_score',''))\n  except: score=float('-inf')\n  if math.isnan(score): score=float('-inf')\n  sel=int(r.get('selected','0') or 0)\n  prev=best.get(fam, (float('-inf'), -1, ''))\n  if (score, sel) >= (prev[0], prev[1]): best[fam]=(score, sel, cset)\nprint(f'ablation_best_family_rows_for_{e}_{s}=' + str(len(best)))\nfor fam in sorted(best): print(f'ablation_best[{fam}]=' + best[fam][2] + ' score=' + str(best[fam][0]))\nmissing=[fam for fam in sorted(FAMILY_COUNTERS) if fam not in best]\nif missing: print('[warn] no counter selected from ablation for families: ' + ', '.join(missing))\"
+fi
+
+if [[ \"\${SKIP_SEQUENCE_BUILD}\" == \"1\" ]] || { [[ \"\${SKIP_SEQUENCE_BUILD}\" == \"auto\" ]] && uv run python -c \"import os; from pathlib import Path; root=Path(os.environ['COUNTER_SEQUENCES_ROOT']); manifests=list(root.glob('*/counter_sequence_manifest.json')); raise SystemExit(0 if manifests else 1)\"; }; then
+  echo 'Using existing counter sequences; skipping build_counter_sequences.'
+else
+  # If sequences are missing, rebuild from merged interval CSV.
+  sequence_args=(--config \${PHASE_FAMILY_ML_CONFIG})
+  if [[ -n \"\${DATASET_INPUT_CSV}\" ]]; then
+    sequence_args+=(--input \${DATASET_INPUT_CSV})
+  fi
+  sequence_args+=(--output-dir \${COUNTER_SEQUENCES_ROOT})
+  sequence_args+=(--experiment-mode \${EXPERIMENT_MODE})
+  sequence_args+=(--threshold-mode \${THRESHOLD_MODE})
+  uv run -m phase_family_ml.build_counter_sequences \"\${sequence_args[@]}\"
 fi
 
 # Train transformer teachers for all discovered experiment/scope directories.
-teacher_args=(--config \${PHASE_FAMILY_ML_CONFIG} --labels-root \${FAMILY_LABELS_ROOT} --output-dir \${TEACHER_OUTPUT_ROOT})
+teacher_args=(--config \${PHASE_FAMILY_ML_CONFIG} --sequences-root \${COUNTER_SEQUENCES_ROOT} --output-dir \${TEACHER_OUTPUT_ROOT})
 if [[ -n \"\${DATASET_INPUT_CSV}\" ]]; then
   teacher_args+=(--input \${DATASET_INPUT_CSV})
 fi
 teacher_args+=(--ablation-results \${ABLATION_RESULTS_CSV})
 teacher_args+=(--experiment-mode \${EXPERIMENT_MODE})
 teacher_args+=(--threshold-mode \${THRESHOLD_MODE})
-if [[ \"\${SKIP_LABEL_REFRESH}\" == \"1\" ]]; then
-  teacher_args+=(--skip-label-refresh)
+if [[ \"\${SKIP_SEQUENCE_REFRESH}\" == \"1\" ]]; then
+  teacher_args+=(--skip-sequence-refresh)
 fi
 if [[ \"\${FULL}\" == \"1\" ]]; then
   teacher_args+=(--full)

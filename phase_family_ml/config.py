@@ -23,7 +23,7 @@ DEFAULT_FAMILY_ML_CONFIG: dict[str, Any] = {
         "history_length": 16,
     },
     "families": {
-        "threshold_mode": "both",
+        "threshold_mode": "global",
         "names": ["L1", "L2", "LLC", "memory_offcore", "branch_control", "core_fp"],
     },
     "splits": {
@@ -61,8 +61,8 @@ DEFAULT_FAMILY_ML_CONFIG: dict[str, Any] = {
         "run_length_buckets": [1, 3, 7, 15],
     },
     "experiments": {
-        "modes": ["per_workload_holdout", "pooled_run_group", "leave_one_workload_out"],
-        "default_mode": "all",
+        "modes": ["pooled_run_group"],
+        "default_mode": "pooled_run_group",
     },
     "runtime": {
         "profile": "quick",

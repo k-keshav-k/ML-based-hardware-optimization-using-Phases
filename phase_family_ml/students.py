@@ -13,10 +13,10 @@ from pathlib import Path
 import numpy as np
 
 from hpc_phase_analysis.io_utils import load_csv_rows, write_csv_rows, write_json
-from phase_ml.baselines import DecisionTree
 
 from .data import load_scope_family_data, states_matrix
 from .metrics import classification_metrics
+from .tree import DecisionTree
 
 
 class LookupBackoffModel:

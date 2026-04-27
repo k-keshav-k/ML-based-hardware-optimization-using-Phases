@@ -8,18 +8,8 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 RESULTS_DIR = PROJECT_ROOT / "results"
 RAW_RESULTS_DIR = RESULTS_DIR / "raw"
 PROCESSED_RESULTS_DIR = RESULTS_DIR / "processed"
-PLOTS_DIR = RESULTS_DIR / "plots"
-TABLES_DIR = RESULTS_DIR / "tables"
-REPORTS_DIR = RESULTS_DIR / "reports"
-LOGS_DIR = RESULTS_DIR / "logs"
 
 DEFAULT_INTERVAL_MS = 10
-DEFAULT_SYNTHETIC_DURATION_MS = 1500
-DEFAULT_SYNTHETIC_PHASE_MS = 150
-DEFAULT_REPETITIONS = 3
-DEFAULT_THREADS = [1, 2, 4, 8]
-DEFAULT_CORRELATION_THRESHOLDS = [0.70, 0.80, 0.90]
-DEFAULT_WINSOR_LIMITS = (0.01, 0.99)
 
 METADATA_COLUMNS = [
     "timestamp_ms",
@@ -214,12 +204,3 @@ COUNTER_FAMILIES = {
         },
     },
 }
-
-SYNTHETIC_WORKLOADS = [
-    "compute",
-    "memory",
-    "cache",
-    "branch",
-    "fp",
-    "mixed",
-]

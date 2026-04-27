@@ -8,7 +8,7 @@ from pathlib import Path
 
 import numpy as np
 
-from hpc_phase_analysis.io_utils import ensure_dir, load_csv_rows, write_csv_rows, write_json
+from hpc_phase_analysis.io_utils import ensure_dir, load_csv_rows, safe_float, write_csv_rows, write_json
 
 from .data import load_scope_family_data, states_matrix
 from .metrics import classification_metrics
@@ -26,18 +26,39 @@ def _group_indices(metadata_rows: list[dict[str, str]]) -> list[list[int]]:
     return list(grouped.values())
 
 
-def _encode_states(sequence: np.ndarray) -> np.ndarray:
-    """Map raw state IDs into stable numeric inputs for the transformer."""
+def _encode_counter_values(sequence: np.ndarray) -> np.ndarray:
+    values = sequence.astype(float).copy()
+    values[~np.isfinite(values)] = np.nan
+    finite = np.isfinite(values)
+    if not np.any(finite):
+        return np.zeros_like(values, dtype=float)
+    values[finite] = np.log1p(np.maximum(values[finite], 0.0))
+    median = float(np.nanmedian(values))
+    values[~np.isfinite(values)] = median
+    mean = float(values.mean())
+    std = float(values.std())
+    if std < 1e-12:
+        std = 1.0
+    return (values - mean) / std
 
-    encoded = sequence.astype(float).copy()
-    encoded[encoded < 0] = -1.0
-    # Values map from {-1,0,1,2} -> {0,1/3,2/3,1.0}
-    return (encoded + 1.0) / 3.0
+
+def _counter_value_matrix(families: list[str], family_data: dict[str, object], n: int) -> np.ndarray:
+    values = np.full((n, len(families)), np.nan, dtype=float)
+    for family_index, family in enumerate(families):
+        payload = family_data[family]
+        rows = payload.rows[:n]
+        column = np.asarray([safe_float(row.get("counter_value", "")) for row in rows], dtype=float)
+        if np.any(np.isfinite(column)):
+            values[:, family_index] = column
+        else:
+            values[:, family_index] = payload.family_state[:n].astype(float)
+    return values
 
 
 def _build_examples(
     family_index: int,
     current: np.ndarray,
+    counter_values: np.ndarray,
     future: np.ndarray,
     split: np.ndarray,
     metadata_rows: list[dict[str, str]],
@@ -63,10 +84,10 @@ def _build_examples(
                 continue
             history_indices = stream[local_pos - history_length + 1 : local_pos + 1]
             if context_mode == "with_context":
-                history_states = current[history_indices, :]
+                history_values = counter_values[history_indices, :]
             else:
-                history_states = current[history_indices, family_index : family_index + 1]
-            x_list.append(_encode_states(history_states))
+                history_values = counter_values[history_indices, family_index : family_index + 1]
+            x_list.append(_encode_counter_values(history_values))
             y_list.append(target.astype(int))
             split_list.append(str(split[row_index]))
             current_state_list.append(int(current[row_index, family_index]))
@@ -199,9 +220,9 @@ def _train_model(
 
 
 def _family_counter_map(experiment_dir: Path, scope: str) -> dict[str, str]:
-    """Read per-family selected counters used to generate current labels."""
+    """Read per-family selected counters used to generate current streams."""
 
-    summary_path = experiment_dir / "family_label_summary.csv"
+    summary_path = experiment_dir / "counter_sequence_summary.csv"
     if not summary_path.exists():
         return {}
     mapping: dict[str, str] = {}
@@ -210,7 +231,7 @@ def _family_counter_map(experiment_dir: Path, scope: str) -> dict[str, str]:
             continue
         family = str(row.get("family", ""))
         selected = str(row.get("selected_counters", "")).strip()
-        source = str(row.get("label_source", "")).strip() or "family_default"
+        source = str(row.get("sequence_source", "")).strip() or "family_default"
         if selected:
             mapping[family] = f"{selected} ({source})"
         else:
@@ -235,6 +256,7 @@ def train_teachers_for_experiment(
     families, current, future, split, metadata_rows = states_matrix(family_data, horizon)
     if not families:
         return []
+    counter_values = _counter_value_matrix(families, family_data, current.shape[0])
     summaries: list[dict[str, object]] = []
     prediction_rows: list[dict[str, object]] = []
     for family_index, family in enumerate(families):
@@ -259,6 +281,7 @@ def train_teachers_for_experiment(
             x, y, split_local, current_local, meta_local, row_ids = _build_examples(
                 family_index,
                 current,
+                counter_values,
                 future,
                 split,
                 metadata_rows,

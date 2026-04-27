@@ -10,7 +10,7 @@ from hpc_phase_analysis.io_utils import load_csv_rows, write_csv_rows
 from .ablation import run_ablation
 from .config import apply_runtime_profile, load_config
 from .evaluation import evaluate_outputs
-from .labels import build_family_labels
+from .labels import build_counter_sequences
 from .orchestration import experiment_dirs, scopes_for_experiment
 from .students import train_students_for_experiment
 from .teacher import train_teachers_for_experiment
@@ -32,15 +32,15 @@ def main() -> None:
     root = Path(args.output_dir or dataset_cfg["output_dir"])
     root.mkdir(parents=True, exist_ok=True)
 
-    labels_root = root / "family_labels"
+    sequences_root = root / "counter_sequences"
     ablation_root = root / "ablation"
     teacher_root = root / "teacher"
     students_root = root / "students"
     eval_root = root / "evaluation"
 
-    build_family_labels(
+    build_counter_sequences(
         input_csv=input_csv,
-        output_root=labels_root,
+        output_root=sequences_root,
         horizon=int(dataset_cfg["horizon"]),
         threshold_mode=str(args.threshold_mode or config["families"]["threshold_mode"]),
         experiment_mode=str(args.experiment_mode or config["experiments"]["default_mode"]),
@@ -51,7 +51,7 @@ def main() -> None:
 
     ablation_root.mkdir(parents=True, exist_ok=True)
     ablation_rows: list[dict[str, object]] = []
-    for exp_dir in experiment_dirs(labels_root):
+    for exp_dir in experiment_dirs(sequences_root):
         for scope in scopes_for_experiment(exp_dir):
             rows = run_ablation(
                 input_csv=input_csv,
@@ -70,11 +70,11 @@ def main() -> None:
                 ablation_rows.append(item)
     write_csv_rows(ablation_root / "family_ablation_results.csv", ablation_rows)
 
-    # Rebuild labels using the selected per-family counter sets from ablation so
-    # teacher training is grounded in the final chosen counters.
-    build_family_labels(
+    # Refresh streams with the selected per-family counters from ablation so
+    # teacher training is grounded in the final chosen counter values.
+    build_counter_sequences(
         input_csv=input_csv,
-        output_root=labels_root,
+        output_root=sequences_root,
         horizon=int(dataset_cfg["horizon"]),
         threshold_mode=str(args.threshold_mode or config["families"]["threshold_mode"]),
         experiment_mode=str(args.experiment_mode or config["experiments"]["default_mode"]),
@@ -82,9 +82,10 @@ def main() -> None:
         val_fraction=float(config["splits"]["val_fraction"]),
         seed=int(config["random_seed"]),
         ablation_results=ablation_root / "family_ablation_results.csv",
+        require_ablation_coverage=True,
     )
 
-    for exp_dir in experiment_dirs(labels_root):
+    for exp_dir in experiment_dirs(sequences_root):
         for scope in scopes_for_experiment(exp_dir):
             teacher_dir = teacher_root / exp_dir.name / scope
             train_teachers_for_experiment(
@@ -112,7 +113,7 @@ def main() -> None:
     family_rows: list[dict[str, str]] = []
     tuple_rows: list[dict[str, str]] = []
     hw_rows: list[dict[str, str]] = []
-    for exp_dir in experiment_dirs(labels_root):
+    for exp_dir in experiment_dirs(sequences_root):
         for scope in scopes_for_experiment(exp_dir):
             stage_dir = eval_root / exp_dir.name / scope
             evaluate_outputs(

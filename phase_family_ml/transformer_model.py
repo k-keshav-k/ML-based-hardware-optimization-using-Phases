@@ -16,7 +16,7 @@ def require_torch():
         import torch
         from torch import nn
     except ImportError as exc:
-        raise SystemExit("PyTorch is required for phase_family_ml teacher training. Install requirements-phase-ml.txt.") from exc
+        raise SystemExit("PyTorch is required for phase_family_ml teacher training. Install with `uv sync --extra teacher`.") from exc
     return torch, nn
 
 

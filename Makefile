@@ -1,14 +1,9 @@
 PYTHON ?= python3
-RAW_DIR ?= results/raw
+RAW_DIR ?= results/raw_phase_family_ml_experiments
 PROCESSED_DIR ?= results/processed
-PREPROCESS_DIR ?= $(PROCESSED_DIR)/preprocessed
-TABLES_DIR ?= results/tables
+FAMILY_DIR ?= results/phase_family_ml
 
-.PHONY: synthetic setup-parsec detect discover collect-synth merge preprocess analyze report paper online-cosched dvfs-stress test example all clean
-
-synthetic:
-	mkdir -p synthetic_workloads/bin
-	gcc -O2 -pthread -lm synthetic_workloads/phase_bench.c -o synthetic_workloads/bin/phase_bench
+.PHONY: setup-parsec detect discover collect merge family-pipeline test clean
 
 setup-parsec:
 	$(PYTHON) scripts/setup_parsec.py
@@ -19,38 +14,18 @@ detect:
 discover:
 	$(PYTHON) scripts/discover_events.py
 
-collect-synth: synthetic
-	$(PYTHON) scripts/run_workloads.py --suite synthetic --threads 1,2,4,8 --reps 3 --modes interval
+collect:
+	$(PYTHON) -m phase_family_ml.collect --output-dir $(RAW_DIR)
 
 merge:
 	$(PYTHON) scripts/merge_runs.py --input-dir $(RAW_DIR) --output-dir $(PROCESSED_DIR)
 
-preprocess:
-	$(PYTHON) scripts/preprocess.py --input $(PROCESSED_DIR)/merged_interval_dataset.csv --output-dir $(PREPROCESS_DIR)
-
-analyze:
-	$(PYTHON) scripts/analyze_correlation.py --preprocess-dir $(PREPROCESS_DIR) --output-dir $(TABLES_DIR)
-
-report:
-	$(PYTHON) scripts/build_report.py
-
-paper:
-	$(PYTHON) -m pipeline.run_all --config experiments/configs/core_uncore_large.json
-
-online-cosched:
-	bash scripts/online/run_burst_coscheduling.sh
-
-dvfs-stress:
-	bash scripts/online/run_dvfs_stress.sh
+family-pipeline:
+	$(PYTHON) -m phase_family_ml.run_pipeline --config config/phase_family_ml_defaults.json --output-dir $(FAMILY_DIR)
 
 test:
-	$(PYTHON) -m unittest discover -s tests -p 'test*.py'
-
-example: detect discover collect-synth merge preprocess analyze report
-
-all: example
+	$(PYTHON) -m unittest discover -s tests -p 'test_phase_family_ml.py'
 
 clean:
-	rm -rf synthetic_workloads/bin
-	rm -rf results/raw/* results/processed/* results/tables/* results/reports/* results/plots/* results/logs/*
+	rm -rf $(PROCESSED_DIR)/* $(FAMILY_DIR)/*
 	find . -path ./.venv -prune -o -path ./third_party -prune -o -type d \( -name __pycache__ -o -name .pytest_cache -o -name .ruff_cache -o -name .mypy_cache \) -prune -exec rm -rf {} +

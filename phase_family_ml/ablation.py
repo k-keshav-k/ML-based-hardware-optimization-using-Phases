@@ -1,4 +1,4 @@
-"""Counter ablation runners for family-wise phase labeling.
+"""Counter ablation runners for family-wise counter sequences.
 
 Implemented ablations:
 - per-family single-counter sweeps plus all-counters upper bound
@@ -13,11 +13,11 @@ from pathlib import Path
 import numpy as np
 
 from hpc_phase_analysis.io_utils import load_csv_rows, safe_float, write_csv_rows, write_json
-from phase_ml.baselines import DecisionTree
 
 from .data import load_scope_family_data
 from .families import FAMILY_COUNTERS, FORBIDDEN_PARTS
 from .metrics import classification_metrics
+from .tree import DecisionTree
 
 
 def parsec_rows(input_csv: Path) -> list[dict[str, str]]:
@@ -70,8 +70,8 @@ def _weighted_score(metrics: dict[str, float], weights: dict[str, float]) -> flo
     )
 
 
-def _row_indices(label_rows: list[dict[str, str]]) -> np.ndarray:
-    return np.asarray([int(row.get("row_index", "0") or 0) for row in label_rows], dtype=int)
+def _row_indices(sequence_rows: list[dict[str, str]]) -> np.ndarray:
+    return np.asarray([int(row.get("row_index", "0") or 0) for row in sequence_rows], dtype=int)
 
 
 def _fit_predict_tree(x: np.ndarray, y: np.ndarray, split: np.ndarray, max_depth: int, min_leaf: int) -> np.ndarray:
@@ -105,9 +105,9 @@ def run_ablation(
 
     # Per-family sweep: every singleton + all-counters upper bound.
     for family in sorted(family_data.keys()):
-        labels = family_data[family]
-        row_indices = _row_indices(labels.rows)
-        if row_indices.size == 0 or labels.future_states.shape[0] == 0:
+        sequences = family_data[family]
+        row_indices = _row_indices(sequences.rows)
+        if row_indices.size == 0 or sequences.future_states.shape[0] == 0:
             output_rows.append(
                 {
                     "family": family,
@@ -119,13 +119,13 @@ def run_ablation(
                     "phase_change_f1": 0.0,
                     "high_usage_recall": 0.0,
                     "validation_score": 0.0,
-                    "selected": 1,
-                    "note": "no_label_rows",
+                    "selected": 0,
+                    "note": "no_sequence_rows",
                 }
             )
             continue
 
-        # Guard against stale/mismatched row_index values when labels were
+        # Guard against stale/mismatched row_index values when sequences were
         # produced from a different merged CSV than the one passed to ablation.
         aligned = (row_indices >= 0) & (row_indices < len(rows))
         if not np.any(aligned):
@@ -140,15 +140,15 @@ def run_ablation(
                     "phase_change_f1": 0.0,
                     "high_usage_recall": 0.0,
                     "validation_score": 0.0,
-                    "selected": 1,
+                    "selected": 0,
                     "note": "row_index_mismatch",
                 }
             )
             continue
         row_indices = row_indices[aligned]
-        targets = labels.future_states[aligned, 0]
-        current = labels.family_state[aligned]
-        split = labels.split[aligned]
+        targets = sequences.future_states[aligned, 0]
+        current = sequences.family_state[aligned]
+        split = sequences.split[aligned]
 
         # We need at least one valid (known) target to score this family.
         valid_target = targets >= 0
@@ -164,7 +164,7 @@ def run_ablation(
                     "phase_change_f1": 0.0,
                     "high_usage_recall": 0.0,
                     "validation_score": 0.0,
-                    "selected": 1,
+                    "selected": 0,
                     "note": "no_valid_targets",
                 }
             )
@@ -183,7 +183,7 @@ def run_ablation(
                     "phase_change_f1": 0.0,
                     "high_usage_recall": 0.0,
                     "validation_score": 0.0,
-                    "selected": 1,
+                    "selected": 0,
                 }
             )
             continue
@@ -228,9 +228,9 @@ def run_ablation(
     if run_global_exhaustive:
         families = []
         for family in sorted(family_data.keys()):
-            labels = family_data[family]
-            row_indices = _row_indices(labels.rows)
-            has_rows = row_indices.size > 0 and labels.future_states.shape[0] > 0
+            sequences = family_data[family]
+            row_indices = _row_indices(sequences.rows)
+            has_rows = row_indices.size > 0 and sequences.future_states.shape[0] > 0
             has_counters = any(counter in valid_counters for counter in FAMILY_COUNTERS.get(family, []))
             if has_rows and has_counters:
                 families.append(family)
@@ -243,25 +243,26 @@ def run_ablation(
         best_score = -1.0
         for combo in itertools.product(*family_counter_lists) if family_counter_lists else []:
             selected = list(combo)
+            family_counter_map = {family: counter for family, counter in zip(families, selected)}
             combo_metrics = []
             for family in families:
-                labels = family_data[family]
-                row_indices = _row_indices(labels.rows)
+                sequences = family_data[family]
+                row_indices = _row_indices(sequences.rows)
                 aligned = (row_indices >= 0) & (row_indices < len(rows))
                 if not np.any(aligned):
                     continue
                 row_indices = row_indices[aligned]
-                split = labels.split
+                split = sequences.split
                 split = split[aligned]
                 eval_mask = _eval_mask(split)
                 x = _counter_matrix(rows, selected)[row_indices]
                 x = _fill_train_medians(x, split == "train")
-                target = labels.future_states[aligned, 0]
+                target = sequences.future_states[aligned, 0]
                 valid_target = target >= 0
                 if not np.any(valid_target):
                     continue
                 pred = _fit_predict_tree(x, target, split, tree_max_depth, tree_min_samples_leaf)
-                current_state = labels.family_state[aligned]
+                current_state = sequences.family_state[aligned]
                 usable = eval_mask & valid_target
                 if not np.any(usable):
                     usable = valid_target
@@ -278,6 +279,7 @@ def run_ablation(
                     "scope": scope,
                     "candidate_type": "one_per_family_exhaustive",
                     "counter_set": combo_key,
+                    "family_counter_map": ";".join(f"{family}:{counter}" for family, counter in family_counter_map.items()),
                     "accuracy": "",
                     "macro_f1": "",
                     "phase_change_f1": "",

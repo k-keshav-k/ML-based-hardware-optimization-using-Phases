@@ -23,13 +23,14 @@ from hpc_phase_analysis.events import (
 )
 from hpc_phase_analysis.io_utils import ensure_dir, listify_csv_argument, utc_now_token, write_json
 from hpc_phase_analysis.workloads import build_parsec_command
-from phase_ml.collect_experiment_sets import DEFAULT_PARSEC_STRICT_WORKLOADS, affinity_groups, chunked, parse_int_list
 
 EXPERIMENT_SET_NAMES = {
     "set1": "set1_single_process_multithread",
     "set2": "set2_multi_process_single_thread",
     "set3": "set3_hybrid_multi_process_multithread",
 }
+
+DEFAULT_PARSEC_STRICT_WORKLOADS = ["blackscholes", "bodytrack", "canneal", "fluidanimate", "freqmine"]
 
 FAMILY_LM_COUNTER_FAMILIES = [
     "instructions_retired",
@@ -72,6 +73,34 @@ def family_lm_readiness(alias_map: dict[str, dict[str, object]]) -> tuple[bool, 
     if not behavior:
         return False, "Family-LM profile requires at least one non-instruction behavior counter."
     return True, ""
+
+
+def parse_int_list(value: str) -> list[int]:
+    return [int(item) for item in listify_csv_argument(value)]
+
+
+def chunked(values: list[str], size: int) -> list[list[str]]:
+    size = max(1, int(size))
+    if not values:
+        return []
+    if len(values) == 1:
+        return [[values[0]] * max(2, size)]
+    groups = [values[index : index + size] for index in range(0, len(values), size)]
+    if len(values) > 1 and groups and len(groups[-1]) == 1:
+        groups[-1] = groups[-1] + values[: size - 1]
+    return groups
+
+
+def affinity_groups(available_cpus: list[int], thread_counts: list[int]) -> list[list[int]]:
+    groups: list[list[int]] = []
+    offset = 0
+    fallback = available_cpus or list(range(max(sum(thread_counts), 1)))
+    for threads in thread_counts:
+        if offset + threads > len(fallback):
+            raise ValueError("Not enough online CPUs for the requested concurrent experiment group.")
+        groups.append(fallback[offset : offset + threads])
+        offset += threads
+    return groups
 
 
 def selected_workloads(platform: dict[str, object], requested: str) -> list[str]:
