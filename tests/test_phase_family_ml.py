@@ -25,6 +25,7 @@ from phase_family_ml.students import HistoryLookupModel, LookupBackoffModel, tra
 from phase_family_ml.teacher import _build_examples, train_teachers_for_experiment
 from phase_family_ml.transformer_model import build_family_transformer, require_torch
 from phase_family_ml.collect import family_lm_events, family_lm_readiness
+from phase_family_ml.splits import build_experiment_splits
 
 
 HEADER = [
@@ -134,6 +135,30 @@ class PhaseFamilyMLTests(unittest.TestCase):
         states = states_for_scope(values, rows, "global", thresholds)
         # Train tertiles come from [1,2], so test values are high bucket.
         self.assertEqual(states.tolist(), [0, 2, 2, 2])
+
+    def test_config_group_holdout_keeps_reps_together(self) -> None:
+        rows = []
+        for threads in ["2", "4", "8"]:
+            for rep in range(1, 5):
+                run_id = f"w_t{threads}_r{rep}"
+                rows.append(
+                    {
+                        "run_id": run_id,
+                        "workload": "w",
+                        "threads": threads,
+                        "experiment_set": "set1_single_process_multithread",
+                        "requested_input_size": "simsmall",
+                        "process_index": "0",
+                        "process_count": "1",
+                        "co_running_workloads": "w",
+                        "core_collection_scope": "system_wide_physical_core",
+                    }
+                )
+        [split] = build_experiment_splits(rows, "config_group_holdout", 0.67, 0.0, 7)
+        by_threads: dict[str, set[str]] = {}
+        for row in rows:
+            by_threads.setdefault(row["threads"], set()).add(split.split_by_run[row["run_id"]])
+        self.assertTrue(all(len(values) == 1 for values in by_threads.values()))
 
     def test_counter_sequence_file_schema(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

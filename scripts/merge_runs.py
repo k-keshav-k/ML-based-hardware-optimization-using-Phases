@@ -19,6 +19,7 @@ from hpc_phase_analysis.io_utils import ensure_dir, load_csv_rows, read_json, sa
 EXPERIMENT_METADATA_COLUMNS = [
     "experiment_set",
     "rep",
+    "requested_input_size",
     "concurrent_group_id",
     "process_index",
     "process_count",

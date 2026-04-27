@@ -18,7 +18,7 @@ def main() -> None:
     parser.add_argument("--require-ablation-coverage", action="store_true")
     parser.add_argument("--horizon", type=int, default=0)
     parser.add_argument("--threshold-mode", choices=["global", "per_workload", "both"], default="")
-    parser.add_argument("--experiment-mode", choices=["per_workload_holdout", "pooled_run_group", "leave_one_workload_out", "all"], default="")
+    parser.add_argument("--experiment-mode", choices=["per_workload_holdout", "pooled_run_group", "config_group_holdout", "leave_one_workload_out", "all"], default="")
     args = parser.parse_args()
 
     config = load_config(args.config or None)

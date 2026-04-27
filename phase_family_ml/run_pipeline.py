@@ -16,20 +16,18 @@ from .students import train_students_for_experiment
 from .teacher import train_teachers_for_experiment
 
 
-def main() -> None:
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--config", default="")
-    parser.add_argument("--input", default="")
-    parser.add_argument("--output-dir", default="")
-    parser.add_argument("--experiment-mode", choices=["per_workload_holdout", "pooled_run_group", "leave_one_workload_out", "all"], default="")
-    parser.add_argument("--threshold-mode", choices=["global", "per_workload", "both"], default="")
-    parser.add_argument("--full", action="store_true")
-    args = parser.parse_args()
+def run_pipeline_for_dataset(
+    *,
+    input_csv: Path,
+    output_dir: Path,
+    config: dict[str, object],
+    experiment_mode: str,
+    threshold_mode: str,
+) -> dict[str, int]:
+    """Run the full family-ML pipeline for one input dataset."""
 
-    config = apply_runtime_profile(load_config(args.config or None), full=args.full)
     dataset_cfg = config["dataset"]
-    input_csv = Path(args.input or dataset_cfg["input_csv"])
-    root = Path(args.output_dir or dataset_cfg["output_dir"])
+    root = Path(output_dir)
     root.mkdir(parents=True, exist_ok=True)
 
     sequences_root = root / "counter_sequences"
@@ -42,8 +40,8 @@ def main() -> None:
         input_csv=input_csv,
         output_root=sequences_root,
         horizon=int(dataset_cfg["horizon"]),
-        threshold_mode=str(args.threshold_mode or config["families"]["threshold_mode"]),
-        experiment_mode=str(args.experiment_mode or config["experiments"]["default_mode"]),
+        threshold_mode=threshold_mode,
+        experiment_mode=experiment_mode,
         train_fraction=float(config["splits"]["train_fraction"]),
         val_fraction=float(config["splits"]["val_fraction"]),
         seed=int(config["random_seed"]),
@@ -76,8 +74,8 @@ def main() -> None:
         input_csv=input_csv,
         output_root=sequences_root,
         horizon=int(dataset_cfg["horizon"]),
-        threshold_mode=str(args.threshold_mode or config["families"]["threshold_mode"]),
-        experiment_mode=str(args.experiment_mode or config["experiments"]["default_mode"]),
+        threshold_mode=threshold_mode,
+        experiment_mode=experiment_mode,
         train_fraction=float(config["splits"]["train_fraction"]),
         val_fraction=float(config["splits"]["val_fraction"]),
         seed=int(config["random_seed"]),
@@ -145,8 +143,37 @@ def main() -> None:
     write_csv_rows(eval_root / "hardware_cost_summary.csv", hw_rows)
     write_csv_rows(eval_root / "family_ablation_results.csv", load_csv_rows(ablation_root / "family_ablation_results.csv"))
 
+    summary = {
+        "ablation_rows": len(ablation_rows),
+        "family_metrics": len(family_rows),
+        "tuple_metrics": len(tuple_rows),
+        "hardware_rows": len(hw_rows),
+    }
     print(
-        f"Pipeline complete: ablation={len(ablation_rows)} family_metrics={len(family_rows)} tuple_metrics={len(tuple_rows)} hardware_rows={len(hw_rows)}"
+        f"Pipeline complete: ablation={summary['ablation_rows']} family_metrics={summary['family_metrics']} "
+        f"tuple_metrics={summary['tuple_metrics']} hardware_rows={summary['hardware_rows']}"
+    )
+    return summary
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--config", default="")
+    parser.add_argument("--input", default="")
+    parser.add_argument("--output-dir", default="")
+    parser.add_argument("--experiment-mode", choices=["per_workload_holdout", "pooled_run_group", "config_group_holdout", "leave_one_workload_out", "all"], default="")
+    parser.add_argument("--threshold-mode", choices=["global", "per_workload", "both"], default="")
+    parser.add_argument("--full", action="store_true")
+    args = parser.parse_args()
+
+    config = apply_runtime_profile(load_config(args.config or None), full=args.full)
+    dataset_cfg = config["dataset"]
+    run_pipeline_for_dataset(
+        input_csv=Path(args.input or dataset_cfg["input_csv"]),
+        output_dir=Path(args.output_dir or dataset_cfg["output_dir"]),
+        config=config,
+        experiment_mode=str(args.experiment_mode or config["experiments"]["default_mode"]),
+        threshold_mode=str(args.threshold_mode or config["families"]["threshold_mode"]),
     )
 
 

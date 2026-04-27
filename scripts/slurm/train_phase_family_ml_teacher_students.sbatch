@@ -35,7 +35,7 @@ export PHASE_FAMILY_ML_CONFIG=${PHASE_FAMILY_ML_CONFIG:-config/phase_family_ml_d
 export DATASET_INPUT_CSV=${DATASET_INPUT_CSV:-results/processed/merged_interval_dataset.csv}
 export ABLATION_RESULTS_CSV=${ABLATION_RESULTS_CSV:-results/phase_family_ml/ablation/family_ablation_results.csv}
 
-export EXPERIMENT_MODE=${EXPERIMENT_MODE:-pooled_run_group}
+export EXPERIMENT_MODE=${EXPERIMENT_MODE:-config_group_holdout}
 export THRESHOLD_MODE=${THRESHOLD_MODE:-global}
 export FULL=${FULL:-0}
 

@@ -30,13 +30,13 @@ export UV_PROJECT_ENVIRONMENT=\${UV_PROJECT_ENVIRONMENT:-.venv}
 
 export PHASE_FAMILY_ML_CONFIG=\${PHASE_FAMILY_ML_CONFIG:-config/phase_family_ml_defaults.json}
 export DATASET_INPUT_CSV=\${DATASET_INPUT_CSV:-results/processed/merged_interval_dataset.csv}
-export COUNTER_SEQUENCES_ROOT=\${COUNTER_SEQUENCES_ROOT:-results/phase_family_ml/counter_sequences/pooled_run_group/threshold_global/counter_value_sequences}
+export COUNTER_SEQUENCES_ROOT=\${COUNTER_SEQUENCES_ROOT:-results/phase_family_ml/counter_sequences}
 export TEACHER_OUTPUT_ROOT=\${TEACHER_OUTPUT_ROOT:-teacher/}
 export ABLATION_RESULTS_CSV=\${ABLATION_RESULTS_CSV:-results/phase_family_ml/ablation/family_ablation_results.csv}
 
 # Sequence-stage controls.
 export SKIP_SEQUENCE_BUILD=\${SKIP_SEQUENCE_BUILD:-auto}   # auto | 0 | 1
-export EXPERIMENT_MODE=\${EXPERIMENT_MODE:-pooled_run_group}
+export EXPERIMENT_MODE=\${EXPERIMENT_MODE:-config_group_holdout}
 export THRESHOLD_MODE=\${THRESHOLD_MODE:-global}
 export REQUIRE_ABLATION_MATCH=\${REQUIRE_ABLATION_MATCH:-0}  # retained for compatibility; missing-family coverage now warns instead of failing
 

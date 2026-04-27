@@ -43,6 +43,61 @@ def _run_grouped_split(rows: list[dict[str, str]], train_fraction: float, val_fr
     return output
 
 
+def _split_items(items: list[object], train_fraction: float, val_fraction: float, seed: int) -> dict[object, str]:
+    rng = np.random.default_rng(seed)
+    shuffled = list(items)
+    rng.shuffle(shuffled)
+    count = len(shuffled)
+    if count == 0:
+        return {}
+    train_count = max(1, int(round(count * train_fraction)))
+    val_count = int(round(count * val_fraction)) if count - train_count > 1 else 0
+    if train_count + val_count >= count and count > 1:
+        train_count = count - 1
+        val_count = 0
+    output: dict[object, str] = {}
+    for index, item in enumerate(shuffled):
+        if index < train_count:
+            output[item] = "train"
+        elif index < train_count + val_count:
+            output[item] = "val"
+        else:
+            output[item] = "test"
+    return output
+
+
+def _config_key(row: dict[str, str]) -> tuple[str, ...]:
+    """Group repeated runs of the same collection scenario."""
+
+    return (
+        str(row.get("experiment_set", "")),
+        str(row.get("requested_input_size", "")),
+        str(row.get("workload", "")),
+        str(row.get("threads", "")),
+        str(row.get("process_index", "")),
+        str(row.get("process_count", "")),
+        str(row.get("co_running_workloads", "")),
+        str(row.get("core_collection_scope", row.get("collection_scope", ""))),
+    )
+
+
+def _config_grouped_split(rows: list[dict[str, str]], train_fraction: float, val_fraction: float, seed: int) -> dict[str, str]:
+    """Split config groups while keeping all reps for a config together."""
+
+    runs_by_config: dict[tuple[str, ...], set[str]] = defaultdict(set)
+    for row in rows:
+        run_id = str(row.get("run_id", ""))
+        if run_id:
+            runs_by_config[_config_key(row)].add(run_id)
+    split_by_config = _split_items(sorted(runs_by_config), train_fraction, val_fraction, seed)
+    output: dict[str, str] = {}
+    for config, run_ids in runs_by_config.items():
+        split = split_by_config.get(config, "train")
+        for run_id in run_ids:
+            output[run_id] = split
+    return output
+
+
 def _per_workload_holdout(rows: list[dict[str, str]], train_fraction: float, val_fraction: float, seed: int) -> dict[str, str]:
     """Split runs independently inside each workload group."""
 
@@ -85,7 +140,7 @@ def build_experiment_splits(
 ) -> list[ExperimentSplit]:
     """Return one or more concrete splits for the requested experiment mode."""
 
-    if mode not in {"per_workload_holdout", "pooled_run_group", "leave_one_workload_out", "all"}:
+    if mode not in {"per_workload_holdout", "pooled_run_group", "config_group_holdout", "leave_one_workload_out", "all"}:
         raise ValueError(f"Unknown experiment mode: {mode}")
     output: list[ExperimentSplit] = []
     if mode in {"per_workload_holdout", "all"}:
@@ -102,6 +157,14 @@ def build_experiment_splits(
                 mode="pooled_run_group",
                 name="pooled_run_group",
                 split_by_run=_run_grouped_split(rows, train_fraction, val_fraction, seed + 101),
+            )
+        )
+    if mode in {"config_group_holdout", "all"}:
+        output.append(
+            ExperimentSplit(
+                mode="config_group_holdout",
+                name="config_group_holdout",
+                split_by_run=_config_grouped_split(rows, train_fraction, val_fraction, seed + 211),
             )
         )
     if mode in {"leave_one_workload_out", "all"}:

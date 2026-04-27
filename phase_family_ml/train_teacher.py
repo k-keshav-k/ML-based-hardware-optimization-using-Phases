@@ -21,7 +21,7 @@ def main() -> None:
     parser.add_argument("--output-dir", default="")
     parser.add_argument("--ablation-results", default="")
     parser.add_argument("--threshold-mode", choices=["global", "per_workload", "both"], default="")
-    parser.add_argument("--experiment-mode", choices=["per_workload_holdout", "pooled_run_group", "leave_one_workload_out", "all"], default="")
+    parser.add_argument("--experiment-mode", choices=["per_workload_holdout", "pooled_run_group", "config_group_holdout", "leave_one_workload_out", "all"], default="")
     parser.add_argument("--require-ablation-coverage", action="store_true")
     parser.add_argument("--skip-sequence-refresh", action="store_true")
     parser.add_argument("--full", action="store_true")
