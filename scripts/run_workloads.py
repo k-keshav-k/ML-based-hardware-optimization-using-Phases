@@ -54,6 +54,18 @@ PHASE_ML_COUNTER_FAMILIES = [
     "llc_misses",
     "offcore_demand_data_reads",
 ]
+PHASE_FAMILY_LM_COUNTER_FAMILIES = [
+    "instructions_retired",
+    "branch_instructions",
+    "branch_mispredictions",
+    "l1d_loads",
+    "l1d_stores",
+    "l2_misses",
+    "llc_references",
+    "llc_misses",
+    "offcore_demand_data_reads",
+    "fp_arithmetic",
+]
 
 
 def parse_modes(value: str) -> tuple[bool, bool]:
@@ -66,6 +78,15 @@ def events_for_profile(alias_map: dict[str, dict[str, object]], profile: str) ->
     # The `phase_ml` profile intentionally excludes timing-derived families (cycles/stalls).
     if profile == "default":
         return supported_event_names(alias_map)
+    if profile == "phase_family_lm":
+        events: list[str] = []
+        for family in PHASE_FAMILY_LM_COUNTER_FAMILIES:
+            metadata = alias_map.get(family, {})
+            if metadata.get("supported") and metadata.get("collection_scope") == "task_local":
+                selected = str(metadata.get("selected_event", "")).strip()
+                if selected:
+                    events.append(selected)
+        return events
     events: list[str] = []
     for family in PHASE_ML_COUNTER_FAMILIES:
         metadata = alias_map.get(family, {})
@@ -88,6 +109,20 @@ def phase_ml_readiness(alias_map: dict[str, dict[str, object]]) -> tuple[bool, s
     behavior_families = confident - {"instructions_retired"}
     if not behavior_families:
         return False, "Phase-ML profile requires at least one confident non-timing behavior counter."
+    return True, ""
+
+
+def phase_family_lm_readiness(alias_map: dict[str, dict[str, object]]) -> tuple[bool, str]:
+    # Family-LM needs instructions plus at least one additional behavior family.
+    confident = {
+        family
+        for family in PHASE_FAMILY_LM_COUNTER_FAMILIES
+        if alias_map.get(family, {}).get("analysis_confident") and alias_map.get(family, {}).get("collection_scope") == "task_local"
+    }
+    if "instructions_retired" not in confident:
+        return False, "Phase family-LM profile requires a confident instructions-retired counter."
+    if not (confident - {"instructions_retired"}):
+        return False, "Phase family-LM profile requires at least one confident non-instruction behavior counter."
     return True, ""
 
 
@@ -162,7 +197,7 @@ def main() -> None:
     parser.add_argument("--spec-config", default="")
     parser.add_argument("--pcm-command-template", default="")
     parser.add_argument("--require-confident-counters", action="store_true")
-    parser.add_argument("--event-profile", default="default", choices=["default", "phase_ml"])
+    parser.add_argument("--event-profile", default="default", choices=["default", "phase_ml", "phase_family_lm"])
     parser.add_argument("--core-collection-scope", default="task_local", choices=["task_local", "system_wide_cpu", "system_wide_physical_core"])
     parser.add_argument("--collect-uncore", dest="collect_uncore", action="store_true")
     parser.add_argument("--no-collect-uncore", dest="collect_uncore", action="store_false")
@@ -180,6 +215,10 @@ def main() -> None:
     if args.require_confident_counters:
         if args.event_profile == "phase_ml":
             ready, reason = phase_ml_readiness(alias_map)
+            if not ready:
+                raise SystemExit(reason)
+        elif args.event_profile == "phase_family_lm":
+            ready, reason = phase_family_lm_readiness(alias_map)
             if not ready:
                 raise SystemExit(reason)
         elif not study_readiness["study_ready_core"]:

@@ -1,4 +1,4 @@
-"""Collect PARSEC phase-ML experiment sets with task-local perf."""
+"""Collect PARSEC experiment sets for the factorized family-wise pipeline."""
 
 from __future__ import annotations
 
@@ -23,8 +23,7 @@ from hpc_phase_analysis.events import (
 )
 from hpc_phase_analysis.io_utils import ensure_dir, listify_csv_argument, utc_now_token, write_json
 from hpc_phase_analysis.workloads import build_parsec_command
-from scripts.run_workloads import DEFAULT_PARSEC_STRICT_WORKLOADS, events_for_profile, phase_ml_readiness
-
+from phase_ml.collect_experiment_sets import DEFAULT_PARSEC_STRICT_WORKLOADS, affinity_groups, chunked, parse_int_list
 
 EXPERIMENT_SET_NAMES = {
     "set1": "set1_single_process_multithread",
@@ -32,42 +31,47 @@ EXPERIMENT_SET_NAMES = {
     "set3": "set3_hybrid_multi_process_multithread",
 }
 
-
-def parse_int_list(value: str) -> list[int]:
-    # Accept comma-delimited thread specifications such as "2,4,8".
-    return [int(item) for item in listify_csv_argument(value)]
-
-
-def chunked(values: list[str], size: int) -> list[list[str]]:
-    # Group workloads for concurrent sets.
-    #
-    # Important special case: when only one workload is requested, we still need
-    # a concurrent group for set2/set3 semantics, so we replicate that workload
-    # to the requested group size (at least 2 processes).
-    size = max(1, int(size))
-    if not values:
-        return []
-    if len(values) == 1:
-        return [[values[0]] * max(2, size)]
-    # For multi-workload lists, keep the last group from becoming singleton when
-    # possible by borrowing from the front.
-    groups = [values[index : index + size] for index in range(0, len(values), size)]
-    if len(values) > 1 and groups and len(groups[-1]) == 1:
-        groups[-1] = groups[-1] + values[: size - 1]
-    return groups
+FAMILY_LM_COUNTER_FAMILIES = [
+    "instructions_retired",
+    "branch_instructions",
+    "branch_mispredictions",
+    "l1d_loads",
+    "l1d_stores",
+    "l2_misses",
+    "llc_references",
+    "llc_misses",
+    "offcore_demand_data_reads",
+    "fp_arithmetic",
+]
 
 
-def affinity_groups(available_cpus: list[int], thread_counts: list[int]) -> list[list[int]]:
-    # Allocate disjoint affinity groups for simultaneously launched processes.
-    groups: list[list[int]] = []
-    offset = 0
-    fallback = available_cpus or list(range(max(sum(thread_counts), 1)))
-    for threads in thread_counts:
-        if offset + threads > len(fallback):
-            raise ValueError("Not enough online CPUs for the requested concurrent experiment group.")
-        groups.append(fallback[offset : offset + threads])
-        offset += threads
-    return groups
+def family_lm_events(alias_map: dict[str, dict[str, object]]) -> list[str]:
+    """Select expanded family counters while respecting host support."""
+
+    events: list[str] = []
+    for family in FAMILY_LM_COUNTER_FAMILIES:
+        metadata = alias_map.get(family, {})
+        if metadata.get("supported") and metadata.get("collection_scope") == "task_local":
+            selected = str(metadata.get("selected_event", "")).strip()
+            if selected:
+                events.append(selected)
+    return events
+
+
+def family_lm_readiness(alias_map: dict[str, dict[str, object]]) -> tuple[bool, str]:
+    """Require enough counters to build at least one family state robustly."""
+
+    confident = {
+        family
+        for family in FAMILY_LM_COUNTER_FAMILIES
+        if alias_map.get(family, {}).get("analysis_confident") and alias_map.get(family, {}).get("collection_scope") == "task_local"
+    }
+    if "instructions_retired" not in confident:
+        return False, "Family-LM profile requires instructions-retired for normalized features."
+    behavior = confident - {"instructions_retired"}
+    if not behavior:
+        return False, "Family-LM profile requires at least one non-instruction behavior counter."
+    return True, ""
 
 
 def selected_workloads(platform: dict[str, object], requested: str) -> list[str]:
@@ -78,13 +82,14 @@ def selected_workloads(platform: dict[str, object], requested: str) -> list[str]
 
 
 def build_common_context(args: argparse.Namespace) -> dict[str, object]:
-    # Shared discovery for all tasks (platform, alias map, event list, uncore support).
+    """Discover PMU context once and reuse for all set tasks."""
+
     platform = detect_platform()
     if not platform["parsec"]["available"]:
         raise SystemExit("PARSEC was not detected on this machine.")
     perf_list_output = discover_perf_list_output()
     alias_map = build_alias_map(platform, extract_event_aliases(str(perf_list_output["stderr"]) + str(perf_list_output["stdout"])))
-    ready, reason = phase_ml_readiness(alias_map)
+    ready, reason = family_lm_readiness(alias_map)
     if not ready:
         raise SystemExit(reason)
     study_readiness = compute_study_readiness(platform, alias_map)
@@ -94,7 +99,7 @@ def build_common_context(args: argparse.Namespace) -> dict[str, object]:
     return {
         "platform": platform,
         "alias_map": alias_map,
-        "events": events_for_profile(alias_map, "phase_ml"),
+        "events": family_lm_events(alias_map),
         "study_readiness": study_readiness,
         "uncore_event_specs": supported_uncore_event_specs(platform, alias_map) if collect_uncore else [],
         "collect_uncore": collect_uncore,
@@ -102,8 +107,80 @@ def build_common_context(args: argparse.Namespace) -> dict[str, object]:
     }
 
 
+def make_task(
+    *,
+    context: dict[str, object],
+    output_dir: Path,
+    experiment_set: str,
+    concurrent_group_id: str,
+    process_index: int,
+    process_count: int,
+    co_running_workloads: list[str],
+    workload: str,
+    threads: int,
+    affinity: list[int],
+    parsec_input: str,
+    interval_ms: int,
+    rep: int,
+) -> dict[str, object]:
+    """Materialize one executable collection task with metadata."""
+
+    platform = context["platform"]
+    unique_suffix = uuid.uuid4().hex[:10]
+    run_id = f"parsec_family_{experiment_set}_r{rep}_{concurrent_group_id}_{workload}_p{process_index}_t{threads}_{utc_now_token()}_{unique_suffix}"
+    run_dir = output_dir / run_id
+    affinity_text = ",".join(str(cpu) for cpu in affinity)
+    base_command = build_parsec_command(str(platform["parsec"]["parsecmgmt"]), workload, threads, parsec_input)
+    command = ["taskset", "-c", affinity_text] + base_command
+    metadata = {
+        "run_id": run_id,
+        "suite": "parsec",
+        "workload": workload,
+        "threads": threads,
+        "cpu_or_core_id": affinity_text,
+        "affinity": affinity,
+        "command": command,
+        "run_dir": str(run_dir),
+        "collection_interval_ms": interval_ms,
+        "collect_interval": True,
+        "collect_aggregate": False,
+        "requested_input_size": parsec_input,
+        "pmu_study_readiness": context["study_readiness"],
+        "alias_map": context["alias_map"],
+        "events": context["events"],
+        "event_profile": "phase_family_lm",
+        "uncore_events": context["uncore_event_specs"],
+        "collect_uncore": context["collect_uncore"],
+        "experiment_set": experiment_set,
+        "rep": rep,
+        "concurrent_group_id": concurrent_group_id,
+        "process_index": process_index,
+        "process_count": process_count,
+        "co_running_workloads": ",".join(co_running_workloads),
+        "collection_scope": context["core_collection_scope"],
+        "core_collection_scope": context["core_collection_scope"],
+        "cpu_topology": platform.get("cpu_topology", {}),
+    }
+    env = dict(os.environ)
+    env["PARSECDIR"] = str(platform["parsec"]["root"])
+    return {
+        "run_dir": run_dir,
+        "metadata": metadata,
+        "execution_group_key": concurrent_group_id,
+        "command": command,
+        "events": context["events"],
+        "interval_ms": interval_ms,
+        "cwd": platform["parsec"]["root"],
+        "env": env,
+        "uncore_events": [spec["event_name"] for spec in context["uncore_event_specs"]] if context["collect_uncore"] else [],
+        "core_collection_scope": context["core_collection_scope"],
+        "system_wide_cpus": affinity if context["core_collection_scope"] != "task_local" else [],
+    }
+
+
 def run_one_task(task: dict[str, object]) -> dict[str, object]:
-    # One task = one PARSEC process capture (with metadata and perf artifacts).
+    """Execute one perf capture and persist result metadata."""
+
     run_dir = ensure_dir(Path(str(task["run_dir"])))
     write_json(run_dir / "metadata.json", task["metadata"])
     results = run_workload_capture(
@@ -135,78 +212,9 @@ def progress_bar(done: int, total: int, width: int = 28) -> str:
     return "[" + "#" * filled + "." * (width - filled) + "]"
 
 
-def make_task(
-    *,
-    context: dict[str, object],
-    output_dir: Path,
-    experiment_set: str,
-    concurrent_group_id: str,
-    process_index: int,
-    process_count: int,
-    co_running_workloads: list[str],
-    workload: str,
-    threads: int,
-    affinity: list[int],
-    parsec_input: str,
-    interval_ms: int,
-    rep: int,
-) -> dict[str, object]:
-    # Convert logical experiment definition into an executable, fully-described task payload.
-    platform = context["platform"]
-    unique_suffix = uuid.uuid4().hex[:10]
-    run_id = f"parsec_{experiment_set}_r{rep}_{concurrent_group_id}_{workload}_p{process_index}_t{threads}_{utc_now_token()}_{unique_suffix}"
-    run_dir = output_dir / run_id
-    affinity_text = ",".join(str(cpu) for cpu in affinity)
-    base_command = build_parsec_command(str(platform["parsec"]["parsecmgmt"]), workload, threads, parsec_input)
-    command = ["taskset", "-c", affinity_text] + base_command
-    metadata = {
-        "run_id": run_id,
-        "suite": "parsec",
-        "workload": workload,
-        "threads": threads,
-        "cpu_or_core_id": affinity_text,
-        "affinity": affinity,
-        "command": command,
-        "run_dir": str(run_dir),
-        "collection_interval_ms": interval_ms,
-        "collect_interval": True,
-        "collect_aggregate": False,
-        "requested_input_size": parsec_input,
-        "pmu_study_readiness": context["study_readiness"],
-        "alias_map": context["alias_map"],
-        "events": context["events"],
-        "event_profile": "phase_ml",
-        "uncore_events": context["uncore_event_specs"],
-        "collect_uncore": context["collect_uncore"],
-        "experiment_set": experiment_set,
-        "rep": rep,
-        "concurrent_group_id": concurrent_group_id,
-        "process_index": process_index,
-        "process_count": process_count,
-        "co_running_workloads": ",".join(co_running_workloads),
-        "collection_scope": context["core_collection_scope"],
-        "core_collection_scope": context["core_collection_scope"],
-        "cpu_topology": platform.get("cpu_topology", {}),
-    }
-    env = dict(os.environ)
-    env["PARSECDIR"] = str(platform["parsec"]["root"])
-    return {
-        "run_dir": run_dir,
-        "metadata": metadata,
-        "execution_group_key": concurrent_group_id,
-        "command": command,
-        "events": context["events"],
-        "interval_ms": interval_ms,
-        "cwd": platform["parsec"]["root"],
-        "env": env,
-        "uncore_events": [spec["event_name"] for spec in context["uncore_event_specs"]] if context["collect_uncore"] else [],
-        "core_collection_scope": context["core_collection_scope"],
-        "system_wide_cpus": affinity if context["core_collection_scope"] != "task_local" else [],
-    }
-
-
 def build_tasks(args: argparse.Namespace, context: dict[str, object]) -> list[dict[str, object]]:
-    # Enumerate set1/set2/set3 tasks for every repetition and workload grouping.
+    """Build set1/set2/set3 tasks with the expanded counter profile."""
+
     platform = context["platform"]
     workloads = selected_workloads(platform, args.workloads)
     if not workloads:
@@ -296,7 +304,7 @@ def main() -> None:
     parser.add_argument("--reps", type=int, default=3)
     parser.add_argument("--interval-ms", type=int, default=DEFAULT_INTERVAL_MS)
     parser.add_argument("--parsec-input", default="test")
-    parser.add_argument("--output-dir", default=str(PROJECT_ROOT / "results" / "raw_phase_ml_experiments"))
+    parser.add_argument("--output-dir", default=str(PROJECT_ROOT / "results" / "raw_phase_family_ml_experiments"))
     parser.add_argument("--set1-threads", default="2,4,8")
     parser.add_argument("--group-size", type=int, default=2)
     parser.add_argument("--hybrid-threads", type=int, default=2)
@@ -307,55 +315,46 @@ def main() -> None:
     parser.add_argument("--dry-run", action="store_true")
     args = parser.parse_args()
 
-    # Stage 1: discover collection context.
     context = build_common_context(args)
-    # Stage 2: materialize concrete execution plan and write manifest.
     tasks = build_tasks(args, context)
     manifest = [task["metadata"] for task in tasks]
-    manifest_path = Path(args.output_dir) / "phase_ml_experiment_manifest.json"
+    manifest_path = Path(args.output_dir) / "phase_family_ml_experiment_manifest.json"
     write_json(manifest_path, manifest)
     if args.dry_run:
         print(json.dumps({"tasks": len(tasks), "manifest": str(manifest_path)}, indent=2))
         return
+
     results = []
     tasks_by_group: dict[str, list[dict[str, object]]] = {}
     for task in tasks:
         tasks_by_group.setdefault(str(task["execution_group_key"]), []).append(task)
     total_tasks = len(tasks)
-    completed_tasks = 0
-    failed_tasks = 0
+    completed = 0
+    failed = 0
     started = time.perf_counter()
-    total_groups = len(tasks_by_group)
-    print(f"[collection] starting {total_tasks} perf tasks across {total_groups} concurrent groups", file=sys.stderr, flush=True)
-    # Stage 3: execute one concurrent group at a time, but each group in parallel.
+    print(f"[collection] starting {total_tasks} family-lm tasks across {len(tasks_by_group)} groups", file=sys.stderr, flush=True)
     for group_index, group_tasks in enumerate(tasks_by_group.values(), start=1):
         group_id = str(group_tasks[0]["execution_group_key"]) if group_tasks else ""
-        print(
-            f"[collection] group {group_index}/{total_groups}: {group_id} ({len(group_tasks)} concurrent task(s))",
-            file=sys.stderr,
-            flush=True,
-        )
+        print(f"[collection] group {group_index}/{len(tasks_by_group)}: {group_id}", file=sys.stderr, flush=True)
         with ThreadPoolExecutor(max_workers=len(group_tasks)) as executor:
             futures = [executor.submit(run_one_task, task) for task in group_tasks]
             for future in as_completed(futures):
                 item = future.result()
                 results.append(item)
-                completed_tasks += 1
+                completed += 1
                 if item.get("returncode") not in (0, None):
-                    failed_tasks += 1
+                    failed += 1
                 elapsed = time.perf_counter() - started
-                rate = completed_tasks / elapsed if elapsed > 0 else 0.0
-                eta = (total_tasks - completed_tasks) / rate if rate > 0 else 0.0
+                rate = completed / elapsed if elapsed > 0 else 0.0
+                eta = (total_tasks - completed) / rate if rate > 0 else 0.0
                 print(
-                    f"[collection] {progress_bar(completed_tasks, total_tasks)} "
-                    f"{completed_tasks}/{total_tasks} done, failed={failed_tasks}, "
-                    f"elapsed={elapsed/60.0:.1f}m, eta={eta/60.0:.1f}m",
+                    f"[collection] {progress_bar(completed, total_tasks)} {completed}/{total_tasks} failed={failed} elapsed={elapsed/60.0:.1f}m eta={eta/60.0:.1f}m",
                     file=sys.stderr,
                     flush=True,
                 )
-    write_json(Path(args.output_dir) / "phase_ml_experiment_results.json", results)
-    failed = [item for item in results if item.get("returncode") not in (0, None)]
-    print(json.dumps({"runs": len(results), "failed": len(failed), "manifest": str(manifest_path)}, indent=2))
+    write_json(Path(args.output_dir) / "phase_family_ml_experiment_results.json", results)
+    failed_runs = [item for item in results if item.get("returncode") not in (0, None)]
+    print(json.dumps({"runs": len(results), "failed": len(failed_runs), "manifest": str(manifest_path)}, indent=2))
 
 
 if __name__ == "__main__":

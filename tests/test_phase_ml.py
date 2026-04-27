@@ -310,6 +310,10 @@ class PhaseMLTests(unittest.TestCase):
         groups = chunked(["a", "b", "c", "d", "e"], 2)
         self.assertEqual(groups, [["a", "b"], ["c", "d"], ["e", "a"]])
 
+    def test_experiment_set_grouping_replicates_single_workload(self) -> None:
+        groups = chunked(["a"], 2)
+        self.assertEqual(groups, [["a", "a"]])
+
     def test_perf_parser_accepts_system_wide_cpu_rows(self) -> None:
         text = "0.100,CPU3,1234,,inst_retired.any [cpu],1000000,100.00,,\n"
         rows = parse_perf_csv(text, interval_mode=True)
