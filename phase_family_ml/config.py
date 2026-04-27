@@ -33,9 +33,8 @@ DEFAULT_FAMILY_ML_CONFIG: dict[str, Any] = {
     },
     "ablation": {
         "score_weights": {
-            "accuracy": 0.4,
-            "phase_change_f1": 0.4,
-            "high_usage_recall": 0.2,
+            "accuracy": 0.7,
+            "high_usage_recall": 0.3,
         },
         "tree_max_depth": 5,
         "tree_min_samples_leaf": 3,

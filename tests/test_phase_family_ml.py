@@ -21,7 +21,7 @@ from phase_family_ml.labels import (
     states_for_scope,
     thresholds_for_family,
 )
-from phase_family_ml.students import LookupBackoffModel
+from phase_family_ml.students import HistoryLookupModel, LookupBackoffModel, train_students_for_experiment
 from phase_family_ml.teacher import _build_examples, train_teachers_for_experiment
 from phase_family_ml.transformer_model import build_family_transformer, require_torch
 from phase_family_ml.collect import family_lm_events, family_lm_readiness
@@ -306,7 +306,7 @@ class PhaseFamilyMLTests(unittest.TestCase):
                 scope="global",
                 horizon=20,
                 output_csv=root / "ablation.csv",
-                weights={"accuracy": 0.4, "phase_change_f1": 0.4, "high_usage_recall": 0.2},
+                weights={"accuracy": 0.7, "high_usage_recall": 0.3},
                 tree_max_depth=3,
                 tree_min_samples_leaf=2,
                 run_global_exhaustive=True,
@@ -386,6 +386,26 @@ class PhaseFamilyMLTests(unittest.TestCase):
         self.assertEqual(pred.tolist()[1], 2)
         self.assertIn(pred.tolist()[2], [1, 2])
 
+    def test_history_lookup_suffix_backoff(self) -> None:
+        history = np.asarray(
+            [
+                [[1, 0, 0], [0, 1, 0]],
+                [[0, 0, 1], [0, 1, 0]],
+                [[1, 0, 0], [0, 0, 1]],
+            ],
+            dtype=float,
+        )
+        target = np.asarray([1, 1, 2], dtype=int)
+        model = HistoryLookupModel().fit(history, target)
+        query = np.asarray(
+            [
+                [[0, 1, 0], [0, 1, 0]],
+                [[0, 1, 0], [0, 0, 1]],
+            ],
+            dtype=float,
+        )
+        self.assertEqual(model.predict(query).tolist(), [1, 2])
+
     def test_smoke_teacher_training_artifacts(self) -> None:
         try:
             require_torch()
@@ -428,6 +448,76 @@ class PhaseFamilyMLTests(unittest.TestCase):
             )
             self.assertTrue(rows)
             self.assertTrue((root / "teacher" / "teacher_predictions.csv").exists())
+
+    def test_student_training_writes_history_distillation_models(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            merged = root / "merged.csv"
+            write_fixture(merged)
+            ablation_rows = [
+                {"experiment": "pooled_run_group", "scope": "global", "family": "L1", "candidate_type": "singleton", "counter_set": "counter__l1d_loads", "selected": 1, "validation_score": 0.7},
+                {"experiment": "pooled_run_group", "scope": "global", "family": "L2", "candidate_type": "singleton", "counter_set": "counter__l2_misses", "selected": 1, "validation_score": 0.7},
+                {"experiment": "pooled_run_group", "scope": "global", "family": "LLC", "candidate_type": "singleton", "counter_set": "counter__llc_references", "selected": 1, "validation_score": 0.7},
+                {"experiment": "pooled_run_group", "scope": "global", "family": "memory_offcore", "candidate_type": "singleton", "counter_set": "counter__total_memory_bandwidth", "selected": 1, "validation_score": 0.7},
+                {"experiment": "pooled_run_group", "scope": "global", "family": "branch_control", "candidate_type": "singleton", "counter_set": "counter__branch_instructions", "selected": 1, "validation_score": 0.7},
+                {"experiment": "pooled_run_group", "scope": "global", "family": "core_fp", "candidate_type": "singleton", "counter_set": "counter__fp_arithmetic", "selected": 1, "validation_score": 0.7},
+            ]
+            write_csv_rows(root / "ablation.csv", ablation_rows)
+            build_counter_sequences(
+                input_csv=merged,
+                output_root=root / "sequences",
+                horizon=1,
+                threshold_mode="global",
+                experiment_mode="pooled_run_group",
+                train_fraction=0.7,
+                val_fraction=0.15,
+                seed=7,
+                ablation_results=root / "ablation.csv",
+            )
+
+            teacher_rows = []
+            scope_dir = root / "sequences" / "pooled_run_group" / "threshold_global"
+            for family in FAMILY_COUNTERS:
+                for row in load_csv_rows(scope_dir / f"counter_sequence_{family}.csv"):
+                    target = int(row.get("future_state_1", "-1") or -1)
+                    if target < 0:
+                        continue
+                    item = {
+                        "family": family,
+                        "scope": "global",
+                        "context_mode": "with_context",
+                        "split": row.get("split", ""),
+                        "workload": row.get("workload", ""),
+                        "run_id": row.get("run_id", ""),
+                        "core_id": row.get("core_id", ""),
+                        "row_index": row.get("row_index", ""),
+                        "family_state": row.get("family_state", ""),
+                        "y_true_future_state_1": target,
+                        "y_pred_future_state_1": target,
+                    }
+                    for cls in range(3):
+                        item[f"p_future_state_1_class_{cls}"] = 1.0 if cls == target else 0.0
+                    teacher_rows.append(item)
+            write_csv_rows(root / "teacher_predictions.csv", teacher_rows)
+
+            rows = train_students_for_experiment(
+                experiment_dir=root / "sequences" / "pooled_run_group",
+                scope="global",
+                teacher_predictions_path=root / "teacher_predictions.csv",
+                output_dir=root / "students",
+                horizon=1,
+                history_length=4,
+                blend_alpha=0.25,
+                tree_max_depth=3,
+                tree_min_leaf=2,
+                run_length_buckets=[1, 3, 7],
+            )
+            models = {row.get("model") for row in rows}
+            self.assertIn("decision_tree_distilled_history", models)
+            self.assertIn("lookup_distilled_history", models)
+            self.assertIn("decision_tree_scratch_history", models)
+            pred_models = {row.get("model") for row in load_csv_rows(root / "students" / "student_predictions.csv")}
+            self.assertIn("decision_tree_scratch_history", pred_models)
 
 
 if __name__ == "__main__":

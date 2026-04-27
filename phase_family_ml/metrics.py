@@ -18,16 +18,6 @@ def macro_f1(y_true: np.ndarray, y_pred: np.ndarray) -> float:
     return float(np.mean(scores)) if scores else 0.0
 
 
-def binary_prf(y_true: np.ndarray, y_pred: np.ndarray) -> dict[str, float]:
-    tp = int(np.sum((y_true == 1) & (y_pred == 1)))
-    fp = int(np.sum((y_true == 0) & (y_pred == 1)))
-    fn = int(np.sum((y_true == 1) & (y_pred == 0)))
-    precision = tp / (tp + fp) if tp + fp else 0.0
-    recall = tp / (tp + fn) if tp + fn else 0.0
-    f1 = 2.0 * precision * recall / (precision + recall) if precision + recall else 0.0
-    return {"phase_change_precision": precision, "phase_change_recall": recall, "phase_change_f1": f1}
-
-
 def high_usage_recall(y_true: np.ndarray, y_pred: np.ndarray) -> float:
     """Recall for the 'high usage' bucket (class 2)."""
 
@@ -49,20 +39,12 @@ def hamming_distance_rows(y_true: np.ndarray, y_pred: np.ndarray) -> float:
 
 
 def classification_metrics(y_true: np.ndarray, y_pred: np.ndarray, current_state: np.ndarray | None = None) -> dict[str, float]:
-    """Compute family metrics including phase-change quality and high-state recall."""
+    """Compute family state-classification metrics."""
 
     y_true = y_true.astype(int)
     y_pred = y_pred.astype(int)
-    change_true = np.zeros_like(y_true)
-    change_pred = np.zeros_like(y_pred)
-    if current_state is not None:
-        current = current_state.astype(int)
-        valid = (current >= 0) & (y_true >= 0)
-        change_true = np.where(valid, (y_true != current).astype(int), 0)
-        change_pred = np.where(valid, (y_pred != current).astype(int), 0)
     return {
         "accuracy": float(np.mean(y_true == y_pred)) if y_true.size else 0.0,
         "macro_f1": macro_f1(y_true, y_pred),
         "high_usage_recall": high_usage_recall(y_true, y_pred),
-        **binary_prf(change_true, change_pred),
     }

@@ -103,6 +103,7 @@ def main() -> None:
                 teacher_predictions_path=teacher_dir / "teacher_predictions.csv",
                 output_dir=students_root / exp_dir.name / scope,
                 horizon=int(dataset_cfg["horizon"]),
+                history_length=int(dataset_cfg["history_length"]),
                 blend_alpha=float(config["student"]["blend_alpha"]),
                 tree_max_depth=int(config["student"]["decision_tree_max_depth"]),
                 tree_min_leaf=int(config["student"]["decision_tree_min_samples_leaf"]),

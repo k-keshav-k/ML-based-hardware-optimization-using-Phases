@@ -7,7 +7,7 @@ This package owns the surviving flow:
 3. `phase_family_ml.build_counter_sequences` writes one state/value sequence per raw counter.
 4. `phase_family_ml.run_ablation` selects one best counter per family from those raw-counter sequences.
 5. `phase_family_ml.train_teacher` refreshes selected family streams and trains transformer teachers from their state histories.
-6. `phase_family_ml.train_students` distills the teacher to a decision tree and lookup/RLE table.
+6. `phase_family_ml.train_students` distills the teacher to lookup/table and decision-tree students, and trains a scratch decision-tree baseline on the same history examples.
 7. `phase_family_ml.evaluate` exports teacher/student comparison CSVs.
 
 ## One Command After Merge

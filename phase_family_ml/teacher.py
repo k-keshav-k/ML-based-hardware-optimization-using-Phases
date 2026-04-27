@@ -106,7 +106,7 @@ def _eval_mask(split: np.ndarray) -> np.ndarray:
 
 
 def _weighted_score(metrics: dict[str, float]) -> float:
-    return 0.4 * float(metrics.get("accuracy", 0.0)) + 0.4 * float(metrics.get("phase_change_f1", 0.0)) + 0.2 * float(metrics.get("high_usage_recall", 0.0))
+    return 0.7 * float(metrics.get("accuracy", 0.0)) + 0.3 * float(metrics.get("high_usage_recall", 0.0))
 
 
 def _average_ce_loss(
@@ -291,7 +291,7 @@ def train_teachers_for_experiment(
             metrics = classification_metrics(y[eval_mask, 0], pred[eval_mask, 0], current_state=current_local[eval_mask])
             score = _weighted_score(metrics)
             print(
-                f"{log_prefix} done score={score:.6f} accuracy={metrics.get('accuracy', 0.0):.4f} phase_change_f1={metrics.get('phase_change_f1', 0.0):.4f}",
+                f"{log_prefix} done score={score:.6f} accuracy={metrics.get('accuracy', 0.0):.4f} high_usage_recall={metrics.get('high_usage_recall', 0.0):.4f}",
                 flush=True,
             )
             if score > best["score"]:
@@ -316,7 +316,6 @@ def train_teachers_for_experiment(
                     "rows": 0,
                     "accuracy": 0.0,
                     "macro_f1": 0.0,
-                    "phase_change_f1": 0.0,
                     "high_usage_recall": 0.0,
                     "validation_score": 0.0,
                 }

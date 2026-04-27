@@ -57,7 +57,6 @@ def _eval_mask(split: np.ndarray) -> np.ndarray:
 def _weighted_score(metrics: dict[str, float], weights: dict[str, float]) -> float:
     return (
         float(weights.get("accuracy", 0.0)) * float(metrics.get("accuracy", 0.0))
-        + float(weights.get("phase_change_f1", 0.0)) * float(metrics.get("phase_change_f1", 0.0))
         + float(weights.get("high_usage_recall", 0.0)) * float(metrics.get("high_usage_recall", 0.0))
     )
 
@@ -122,7 +121,6 @@ def run_ablation(
                     "counter_set": "",
                     "accuracy": 0.0,
                     "macro_f1": 0.0,
-                    "phase_change_f1": 0.0,
                     "high_usage_recall": 0.0,
                     "validation_score": 0.0,
                     "selected": 0,
@@ -145,7 +143,6 @@ def run_ablation(
                 metrics = {
                     "accuracy": 0.0,
                     "macro_f1": 0.0,
-                    "phase_change_f1": 0.0,
                     "high_usage_recall": 0.0,
                 }
                 score = 0.0
@@ -210,7 +207,6 @@ def run_ablation(
                     "family_counter_map": ";".join(f"{family}:{counter}" for family, counter in family_counter_map.items()),
                     "accuracy": "",
                     "macro_f1": "",
-                    "phase_change_f1": "",
                     "high_usage_recall": "",
                     "validation_score": aggregate,
                     "selected": 0,

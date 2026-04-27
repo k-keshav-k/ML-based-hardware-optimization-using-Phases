@@ -3,6 +3,8 @@
 Students include:
 - decision-tree student (distilled with blended teacher/true targets)
 - lookup/RLE-style backoff student for cheap table inference
+- history-window decision tree and lookup students trained on the same examples
+  used by the transformer teacher
 """
 
 from __future__ import annotations
@@ -16,6 +18,7 @@ from hpc_phase_analysis.io_utils import load_csv_rows, write_csv_rows, write_jso
 
 from .data import load_scope_family_data, states_matrix
 from .metrics import classification_metrics
+from .teacher import _build_examples
 from .tree import DecisionTree
 
 
@@ -72,6 +75,45 @@ class LookupBackoffModel:
                 output[index] = self.by_current[int(cur)]
             else:
                 output[index] = self.fallback
+        return output
+
+
+class HistoryLookupModel:
+    """Lookup table over recent state-history windows with suffix backoff."""
+
+    def __init__(self) -> None:
+        self.tables: list[dict[tuple[int, ...], int]] = []
+        self.fallback = 1
+
+    def fit(self, history: np.ndarray, target: np.ndarray) -> "HistoryLookupModel":
+        if history.shape[0] == 0 or target.size == 0:
+            self.tables = []
+            self.fallback = 1
+            return self
+        self.fallback = Counter(target.astype(int).tolist()).most_common(1)[0][0]
+        width = history.shape[2]
+        tables: list[dict[tuple[int, ...], int]] = []
+        for suffix_len in range(history.shape[1], 0, -1):
+            counts: dict[tuple[int, ...], Counter[int]] = defaultdict(Counter)
+            for row, tgt in zip(history, target):
+                key = tuple(row[-suffix_len:, :].astype(int).reshape(suffix_len * width).tolist())
+                counts[key][int(tgt)] += 1
+            tables.append({key: counter.most_common(1)[0][0] for key, counter in counts.items()})
+        self.tables = tables
+        return self
+
+    def predict(self, history: np.ndarray) -> np.ndarray:
+        output = np.full(history.shape[0], self.fallback, dtype=int)
+        if not self.tables:
+            return output
+        width = history.shape[2]
+        for index, row in enumerate(history):
+            for table_index, table in enumerate(self.tables):
+                suffix_len = history.shape[1] - table_index
+                key = tuple(row[-suffix_len:, :].astype(int).reshape(suffix_len * width).tolist())
+                if key in table:
+                    output[index] = table[key]
+                    break
         return output
 
 
@@ -149,12 +191,39 @@ def _teacher_tables(path: Path, horizon: int) -> tuple[dict[tuple[str, int], dic
     return hard, soft
 
 
+def _family_context_modes(path: Path) -> dict[str, str]:
+    modes: dict[str, str] = {}
+    for row in load_csv_rows(path):
+        family = str(row.get("family", ""))
+        mode = str(row.get("context_mode", ""))
+        if family and mode:
+            modes.setdefault(family, mode)
+    return modes
+
+
+def _teacher_targets(
+    family: str,
+    row_ids: np.ndarray,
+    step: int,
+    hard_teacher: dict[tuple[str, int], dict[int, int]],
+) -> tuple[np.ndarray, np.ndarray]:
+    target = np.full(row_ids.shape[0], -1, dtype=int)
+    valid = np.zeros(row_ids.shape[0], dtype=bool)
+    for index, row_id in enumerate(row_ids):
+        value = hard_teacher.get((family, int(row_id)), {}).get(step, -1)
+        if value >= 0:
+            target[index] = int(value)
+            valid[index] = True
+    return target, valid
+
+
 def train_students_for_experiment(
     experiment_dir: Path,
     scope: str,
     teacher_predictions_path: Path,
     output_dir: Path,
     horizon: int,
+    history_length: int,
     blend_alpha: float,
     tree_max_depth: int,
     tree_min_leaf: int,
@@ -168,6 +237,7 @@ def train_students_for_experiment(
     if not families:
         return []
     hard_teacher, soft_teacher = _teacher_tables(teacher_predictions_path, horizon)
+    context_modes = _family_context_modes(teacher_predictions_path)
     eval_mask = _eval_mask(split)
 
     summary_rows: list[dict[str, object]] = []
@@ -230,6 +300,7 @@ def train_students_for_experiment(
                 "family": family,
                 "scope": scope,
                 "model": "decision_tree_student",
+                "feature_source": "run_length",
                 **tree_metrics,
                 "teacher_retention": tree_ret,
                 "tree_depth": tree_max_depth,
@@ -241,12 +312,103 @@ def train_students_for_experiment(
                 "family": family,
                 "scope": scope,
                 "model": "lookup_rle_student",
+                "feature_source": "run_length",
                 **lookup_metrics,
                 "teacher_retention": lookup_ret,
                 "tree_depth": "",
                 "lookup_entries": int(len(np.unique(np.c_[cur, prev, run_len, context_hash], axis=0))),
             }
         )
+
+        context_mode = context_modes.get(family, "without_context")
+        x_hist, y_hist, split_hist, current_hist, meta_hist, row_ids_hist = _build_examples(
+            family_index,
+            current,
+            future,
+            split,
+            metadata_rows,
+            history_length,
+            context_mode,
+        )
+        if x_hist.shape[0] > 0:
+            hist_features = x_hist.reshape(x_hist.shape[0], -1)
+            eval_hist = _eval_mask(split_hist)
+            train_hist = split_hist == "train"
+            if not np.any(train_hist):
+                train_hist = np.ones(split_hist.shape[0], dtype=bool)
+
+            hist_preds: dict[str, np.ndarray] = {
+                "decision_tree_distilled_history": np.full((x_hist.shape[0], horizon), -1, dtype=int),
+                "lookup_distilled_history": np.full((x_hist.shape[0], horizon), -1, dtype=int),
+                "decision_tree_scratch_history": np.full((x_hist.shape[0], horizon), -1, dtype=int),
+            }
+            lookup_entries_by_step: list[int] = []
+
+            for step in range(1, horizon + 1):
+                true_target = y_hist[:, step - 1].astype(int)
+                valid_true = true_target >= 0
+                scratch_fit = train_hist & valid_true
+                if not np.any(scratch_fit):
+                    scratch_fit = valid_true
+                if np.any(scratch_fit):
+                    scratch_tree = DecisionTree(max_depth=tree_max_depth, min_samples_leaf=tree_min_leaf)
+                    scratch_tree.fit(hist_features[scratch_fit], true_target[scratch_fit])
+                    hist_preds["decision_tree_scratch_history"][:, step - 1] = scratch_tree.predict(hist_features)
+
+                teacher_target, valid_teacher = _teacher_targets(family, row_ids_hist, step, hard_teacher)
+                distill_fit = train_hist & valid_teacher
+                if not np.any(distill_fit):
+                    distill_fit = valid_teacher
+                if np.any(distill_fit):
+                    distill_tree = DecisionTree(max_depth=tree_max_depth, min_samples_leaf=tree_min_leaf)
+                    distill_tree.fit(hist_features[distill_fit], teacher_target[distill_fit])
+                    hist_preds["decision_tree_distilled_history"][:, step - 1] = distill_tree.predict(hist_features)
+
+                    lookup = HistoryLookupModel()
+                    lookup.fit(x_hist[distill_fit], teacher_target[distill_fit])
+                    hist_preds["lookup_distilled_history"][:, step - 1] = lookup.predict(x_hist)
+                    lookup_entries_by_step.append(sum(len(table) for table in lookup.tables))
+
+            teacher_h1, valid_teacher_h1 = _teacher_targets(family, row_ids_hist, 1, hard_teacher)
+            for model_name, preds in hist_preds.items():
+                metrics = classification_metrics(y_hist[eval_hist, 0], preds[eval_hist, 0], current_state=current_hist[eval_hist])
+                valid_retention = eval_hist & valid_teacher_h1
+                retention = float(np.mean(preds[valid_retention, 0] == teacher_h1[valid_retention])) if np.any(valid_retention) else 0.0
+                summary_rows.append(
+                    {
+                        "family": family,
+                        "scope": scope,
+                        "model": model_name,
+                        "feature_source": "state_history",
+                        "context_mode": context_mode,
+                        "history_length": history_length,
+                        **metrics,
+                        "teacher_retention": retention,
+                        "tree_depth": tree_max_depth if "decision_tree" in model_name else "",
+                        "lookup_entries": max(lookup_entries_by_step) if model_name == "lookup_distilled_history" and lookup_entries_by_step else "",
+                    }
+                )
+
+            for i, row in enumerate(meta_hist):
+                base = {
+                    "family": family,
+                    "scope": scope,
+                    "split": split_hist[i],
+                    "workload": row.get("workload", ""),
+                    "run_id": row.get("run_id", ""),
+                    "core_id": row.get("core_id", ""),
+                    "row_index": int(row_ids_hist[i]),
+                    "family_state": int(current_hist[i]),
+                    "context_mode": context_mode,
+                    "feature_source": "state_history",
+                }
+                for model_name, preds in hist_preds.items():
+                    item = dict(base)
+                    item["model"] = model_name
+                    for step in range(1, horizon + 1):
+                        item[f"y_true_future_state_{step}"] = int(y_hist[i, step - 1])
+                        item[f"y_pred_future_state_{step}"] = int(preds[i, step - 1])
+                    prediction_rows.append(item)
 
         for i, row in enumerate(metadata_rows):
             base = {
@@ -258,6 +420,7 @@ def train_students_for_experiment(
                 "core_id": row.get("core_id", ""),
                 "row_index": i,
                 "family_state": int(cur[i]),
+                "feature_source": "run_length",
             }
             tree_row = dict(base)
             tree_row["model"] = "decision_tree_student"
@@ -278,6 +441,7 @@ def train_students_for_experiment(
         {
             "scope": scope,
             "horizon": horizon,
+            "history_length": history_length,
             "blend_alpha": blend_alpha,
             "rows": len(prediction_rows),
         },
