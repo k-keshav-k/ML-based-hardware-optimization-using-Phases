@@ -6,7 +6,7 @@ This package owns the surviving flow:
 2. `scripts/merge_runs.py` merges raw run folders into one interval table.
 3. `phase_family_ml.build_counter_sequences` writes one LM-style value sequence per counter.
 4. `phase_family_ml.run_ablation` selects one counter per family with global exhaustive search.
-5. `phase_family_ml.train_teacher` trains transformer teachers from the selected counters.
+5. `phase_family_ml.train_teacher` trains transformer teachers from selected-counter state histories.
 6. `phase_family_ml.train_students` distills the teacher to a decision tree and lookup/RLE table.
 7. `phase_family_ml.evaluate` exports teacher/student comparison CSVs.
 
@@ -19,7 +19,7 @@ python -m phase_family_ml.run_pipeline \
   --output-dir results/phase_family_ml
 ```
 
-`run_pipeline` builds counter sequences, runs ablation, refreshes the selected one-counter-per-family streams, trains teachers on selected counter-value histories, trains students, and evaluates outputs.
+`run_pipeline` builds counter sequences, runs ablation, refreshes the selected one-counter-per-family streams, trains teachers on low/moderate/high state histories, trains students, and evaluates outputs.
 
 ## Collection And Merge
 

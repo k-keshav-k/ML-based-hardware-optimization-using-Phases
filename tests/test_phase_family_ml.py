@@ -23,7 +23,7 @@ from phase_family_ml.labels import (
     thresholds_for_family,
 )
 from phase_family_ml.students import LookupBackoffModel
-from phase_family_ml.teacher import train_teachers_for_experiment
+from phase_family_ml.teacher import _build_examples, train_teachers_for_experiment
 from phase_family_ml.transformer_model import build_family_transformer, require_torch
 from phase_family_ml.collect import family_lm_events, family_lm_readiness
 
@@ -312,6 +312,50 @@ class PhaseFamilyMLTests(unittest.TestCase):
         )
         logits = model(torch.zeros(3, 8, 4))
         self.assertEqual(tuple(logits.shape), (3, 20, 3))
+
+    def test_teacher_examples_use_state_history_inputs(self) -> None:
+        current = np.asarray(
+            [
+                [0, -1],
+                [1, 0],
+                [2, 1],
+                [1, 2],
+                [0, -1],
+            ],
+            dtype=int,
+        )
+        future = np.asarray([[[1], [0]], [[2], [1]], [[1], [2]], [[0], [1]], [[2], [0]]], dtype=int)
+        split = np.asarray(["train", "train", "train", "val", "val"])
+        metadata_rows = [
+            {"run_id": "r1", "core_id": "0", "timestamp_ms": str(i * 10)}
+            for i in range(current.shape[0])
+        ]
+
+        x, y, *_ = _build_examples(
+            family_index=0,
+            current=current,
+            future=future,
+            split=split,
+            metadata_rows=metadata_rows,
+            history_length=3,
+            context_mode="without_context",
+        )
+        self.assertEqual(tuple(x.shape), (3, 3, 3))
+        np.testing.assert_array_equal(x[0], np.eye(3))
+        self.assertEqual(y[0].tolist(), [1])
+
+        x_context, *_ = _build_examples(
+            family_index=0,
+            current=current,
+            future=future,
+            split=split,
+            metadata_rows=metadata_rows,
+            history_length=3,
+            context_mode="with_context",
+        )
+        self.assertEqual(tuple(x_context.shape), (3, 3, 6))
+        np.testing.assert_array_equal(x_context[0, 0, :3], [1.0, 0.0, 0.0])
+        np.testing.assert_array_equal(x_context[0, 0, 3:], [0.0, 0.0, 0.0])
 
     def test_lookup_backoff(self) -> None:
         model = LookupBackoffModel([1, 3, 7])

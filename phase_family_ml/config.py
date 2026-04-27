@@ -19,7 +19,7 @@ DEFAULT_FAMILY_ML_CONFIG: dict[str, Any] = {
     "dataset": {
         "input_csv": str(PROJECT_ROOT / "results" / "processed" / "merged_interval_dataset.csv"),
         "output_dir": str(PROJECT_ROOT / "results" / "phase_family_ml"),
-        "horizon": 20,
+        "horizon": 1,
         "history_length": 16,
     },
     "families": {
