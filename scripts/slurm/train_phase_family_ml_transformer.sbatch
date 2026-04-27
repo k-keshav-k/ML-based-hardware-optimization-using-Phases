@@ -90,7 +90,48 @@ if [[ \"\${SKIP_SEQUENCE_REFRESH}\" != \"1\" ]]; then
     echo \"Ablation CSV not found at \${ABLATION_RESULTS_CSV}. Set ABLATION_RESULTS_CSV or run ablation first.\" >&2
     exit 1
   fi
-  uv run python -c \"import csv, math, os; from phase_family_ml.families import FAMILY_COUNTERS; p=os.environ['ABLATION_RESULTS_CSV']; e=os.environ['EXPERIMENT_MODE']; s=os.environ['THRESHOLD_MODE']; rows=list(csv.DictReader(open(p,newline=''))); best={};\nfor r in rows:\n  fam=r.get('family','');\n  if fam not in FAMILY_COUNTERS: continue\n  if r.get('experiment','')!=e or r.get('scope','')!=s: continue\n  if r.get('candidate_type','')=='unavailable': continue\n  cset=(r.get('counter_set','') or '').strip()\n  if not cset: continue\n  try: score=float(r.get('validation_score',''))\n  except: score=float('-inf')\n  if math.isnan(score): score=float('-inf')\n  sel=int(r.get('selected','0') or 0)\n  prev=best.get(fam, (float('-inf'), -1, ''))\n  if (score, sel) >= (prev[0], prev[1]): best[fam]=(score, sel, cset)\nprint(f'ablation_best_family_rows_for_{e}_{s}=' + str(len(best)))\nfor fam in sorted(best): print(f'ablation_best[{fam}]=' + best[fam][2] + ' score=' + str(best[fam][0]))\nmissing=[fam for fam in sorted(FAMILY_COUNTERS) if fam not in best]\nif missing: print('[warn] no counter selected from ablation for families: ' + ', '.join(missing))\"
+  uv run python - <<'PY'
+import csv
+import math
+import os
+
+from phase_family_ml.families import FAMILY_COUNTERS
+
+p = os.environ["ABLATION_RESULTS_CSV"]
+e = os.environ["EXPERIMENT_MODE"]
+s = os.environ["THRESHOLD_MODE"]
+rows = list(csv.DictReader(open(p, newline="")))
+best = {}
+
+for r in rows:
+    fam = r.get("family", "")
+    if fam not in FAMILY_COUNTERS:
+        continue
+    if r.get("experiment", "") != e or r.get("scope", "") != s:
+        continue
+    if r.get("candidate_type", "") == "unavailable":
+        continue
+    cset = (r.get("counter_set", "") or "").strip()
+    if not cset:
+        continue
+    try:
+        score = float(r.get("validation_score", ""))
+    except Exception:
+        score = float("-inf")
+    if math.isnan(score):
+        score = float("-inf")
+    sel = int(r.get("selected", "0") or 0)
+    prev = best.get(fam, (float("-inf"), -1, ""))
+    if (score, sel) >= (prev[0], prev[1]):
+        best[fam] = (score, sel, cset)
+
+print(f"ablation_best_family_rows_for_{e}_{s}=" + str(len(best)))
+for fam in sorted(best):
+    print(f"ablation_best[{fam}]=" + best[fam][2] + " score=" + str(best[fam][0]))
+missing = [fam for fam in sorted(FAMILY_COUNTERS) if fam not in best]
+if missing:
+    print("[warn] no counter selected from ablation for families: " + ", ".join(missing))
+PY
 fi
 
 if [[ \"\${SKIP_SEQUENCE_BUILD}\" == \"1\" ]] || { [[ \"\${SKIP_SEQUENCE_BUILD}\" == \"auto\" ]] && uv run python -c \"import os; from pathlib import Path; root=Path(os.environ['COUNTER_SEQUENCES_ROOT']); manifests=list(root.glob('*/counter_sequence_manifest.json')); raise SystemExit(0 if manifests else 1)\"; }; then
