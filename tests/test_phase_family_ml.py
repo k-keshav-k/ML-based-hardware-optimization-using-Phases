@@ -9,9 +9,8 @@ from pathlib import Path
 
 import numpy as np
 
-from hpc_phase_analysis.io_utils import load_csv_rows, write_csv_rows
+from hpc_phase_analysis.io_utils import load_csv_rows, read_json, write_csv_rows
 from phase_family_ml.ablation import run_ablation
-from phase_family_ml.config import deep_update, load_config
 from phase_family_ml.families import FAMILY_COUNTERS, assert_no_forbidden_counter_columns
 from phase_family_ml.labels import (
     _bucketize,
@@ -153,6 +152,40 @@ class PhaseFamilyMLTests(unittest.TestCase):
             )
             self.assertEqual(len(summaries), 1)
             sequence_path = root / "sequences" / "pooled_run_group" / "threshold_global" / "counter_sequence_L1.csv"
+            self.assertFalse(sequence_path.exists())
+            manifest = read_json(root / "sequences" / "pooled_run_group" / "counter_sequence_manifest.json")
+            self.assertFalse(manifest.get("family_sequences_written"))
+            counter_rows = load_csv_rows(sequence_path.parent / "counter_value_sequences" / "counter_sequence_counter__branch_mispredictions.csv")
+            self.assertTrue(counter_rows)
+            first = counter_rows[0]
+            self.assertIn("family_state", first)
+            self.assertIn("future_state_20", first)
+            self.assertIn("will_change_within_horizon", first)
+            self.assertIn("time_to_change", first)
+            self.assertIn("split", first)
+            self.assertIn("workload", first)
+            self.assertIn("run_id", first)
+            self.assertIn("core_id", first)
+            self.assertIn("counter_value", first)
+            self.assertIn("future_counter_value_20", first)
+
+            write_csv_rows(
+                root / "ablation.csv",
+                [
+                    {"experiment": "pooled_run_group", "scope": "global", "family": "L1", "candidate_type": "singleton", "counter_set": "counter__l1d_loads", "selected": 1, "validation_score": 0.7},
+                ],
+            )
+            build_counter_sequences(
+                input_csv=merged,
+                output_root=root / "sequences",
+                horizon=20,
+                threshold_mode="global",
+                experiment_mode="pooled_run_group",
+                train_fraction=0.7,
+                val_fraction=0.15,
+                seed=7,
+                ablation_results=root / "ablation.csv",
+            )
             rows = load_csv_rows(sequence_path)
             self.assertTrue(rows)
             first = rows[0]
@@ -164,29 +197,13 @@ class PhaseFamilyMLTests(unittest.TestCase):
             self.assertIn("workload", first)
             self.assertIn("run_id", first)
             self.assertIn("core_id", first)
-            counter_rows = load_csv_rows(sequence_path.parent / "counter_value_sequences" / "counter_sequence_counter__branch_mispredictions.csv")
-            self.assertTrue(counter_rows)
-            self.assertIn("counter_value", counter_rows[0])
-            self.assertIn("future_counter_value_20", counter_rows[0])
+            self.assertEqual(rows, load_csv_rows(sequence_path.parent / "counter_value_sequences" / "counter_sequence_counter__l1d_loads.csv"))
 
     def test_sequences_use_ablation_selected_counters_for_teacher_inputs(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             merged = root / "merged.csv"
             write_fixture(merged)
-
-            build_counter_sequences(
-                input_csv=merged,
-                output_root=root / "sequences_default",
-                horizon=20,
-                threshold_mode="global",
-                experiment_mode="pooled_run_group",
-                train_fraction=0.7,
-                val_fraction=0.15,
-                seed=7,
-            )
-            default_rows = load_csv_rows(root / "sequences_default" / "pooled_run_group" / "threshold_global" / "counter_sequence_core_fp.csv")
-            default_states = [int(row.get("family_state", "-1") or -1) for row in default_rows]
 
             # Provide one selected counter per family exactly as the ablation output
             # schema does, then rebuild sequences from that selection.
@@ -214,17 +231,16 @@ class PhaseFamilyMLTests(unittest.TestCase):
                 ablation_results=root / "ablation.csv",
             )
             selected_rows = load_csv_rows(root / "sequences_selected" / "pooled_run_group" / "threshold_global" / "counter_sequence_core_fp.csv")
-            selected_states = [int(row.get("family_state", "-1") or -1) for row in selected_rows]
-
-            self.assertEqual(len(default_states), len(selected_states))
-            self.assertTrue(any(a != b for a, b in zip(default_states, selected_states)))
+            self.assertTrue(selected_rows)
+            raw_rows = load_csv_rows(root / "sequences_selected" / "pooled_run_group" / "threshold_global" / "counter_value_sequences" / "counter_sequence_counter__fp_arithmetic.csv")
+            self.assertEqual(selected_rows, raw_rows)
 
             summary_rows = load_csv_rows(root / "sequences_selected" / "pooled_run_group" / "counter_sequence_summary.csv")
             core_row = next(row for row in summary_rows if row.get("family", "") == "core_fp" and row.get("scope", "") == "global")
             self.assertEqual(core_row.get("sequence_source", ""), "ablation_selected")
             self.assertEqual(core_row.get("selected_counters", ""), "counter__fp_arithmetic")
             selected_first = selected_rows[0]
-            self.assertEqual(selected_first.get("selected_counter", ""), "counter__fp_arithmetic")
+            self.assertEqual(selected_first.get("counter_name", ""), "counter__fp_arithmetic")
             self.assertIn("counter_value", selected_first)
             self.assertIn("future_counter_value_20", selected_first)
 
@@ -269,7 +285,7 @@ class PhaseFamilyMLTests(unittest.TestCase):
             self.assertEqual(core_row.get("selected_counters", ""), "counter__instructions_retired")
             self.assertEqual(core_row.get("sequence_source", ""), "ablation_selected")
 
-    def test_ablation_singleton_all_and_global_exhaustive(self) -> None:
+    def test_ablation_singleton_and_global_exhaustive(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             merged = root / "merged.csv"
@@ -296,7 +312,7 @@ class PhaseFamilyMLTests(unittest.TestCase):
                 run_global_exhaustive=True,
             )
             self.assertTrue(any(row.get("candidate_type") == "singleton" for row in rows))
-            self.assertTrue(any(row.get("candidate_type") == "all_counters" for row in rows))
+            self.assertFalse(any(row.get("candidate_type") == "all_counters" for row in rows))
             self.assertTrue(any(row.get("family") == "__global__" for row in rows))
 
     def test_transformer_output_shape(self) -> None:

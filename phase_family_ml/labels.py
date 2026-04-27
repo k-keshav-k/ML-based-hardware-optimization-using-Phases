@@ -7,6 +7,7 @@ discrete states used for ablation scoring.
 from __future__ import annotations
 
 import math
+from shutil import copyfile
 from collections import defaultdict
 from pathlib import Path
 
@@ -360,6 +361,10 @@ def _scope_output_dir(base_dir: Path, scope: str) -> Path:
     return ensure_dir(base_dir / f"threshold_{scope}")
 
 
+def _counter_sequence_path(scope_dir: Path, counter: str) -> Path:
+    return scope_dir / "counter_value_sequences" / f"counter_sequence_{counter}.csv"
+
+
 def counter_value_series(rows: list[dict[str, str]], counter: str) -> np.ndarray:
     """Return one finite-or-NaN value array for a raw counter column."""
 
@@ -408,6 +413,7 @@ def build_counter_sequences_for_split(
     horizon: int,
     threshold_mode: str,
     selected_counters_by_scope: dict[str, dict[str, list[str]]] | None = None,
+    write_family_sequences: bool = True,
 ) -> dict[str, object]:
     """Generate counter sequence artifacts for all families for one experiment split."""
 
@@ -426,19 +432,37 @@ def build_counter_sequences_for_split(
                 "counter_files_written": counter_files_written,
             }
         )
+        scope_dir = _scope_output_dir(output_dir, scope)
+        if not write_family_sequences:
+            for family in FAMILY_COUNTERS:
+                stale_path = scope_dir / f"counter_sequence_{family}.csv"
+                if stale_path.exists():
+                    stale_path.unlink()
+            continue
         selected_for_scope = selected_counters_by_scope.get(scope, {}) if selected_counters_by_scope else {}
-        usage = family_usage_scores(rows, selected_for_scope)
         for family in FAMILY_COUNTERS:
-            values = usage.get(family, np.full(len(rows), np.nan, dtype=float))
-            thresholds = thresholds_for_family(values, rows, split.split_by_run, scope)
-            states = states_for_scope(values, rows, scope, thresholds)
-            label_rows = build_counter_state_rows(rows, states, split.split_by_run, horizon)
             selected_counter_set = selected_for_scope.get(family, [])
+            family_path = scope_dir / f"counter_sequence_{family}.csv"
+            source = "missing_single_ablation_selection"
+            label_rows: list[dict[str, str]] = []
+            low = math.nan
+            high = math.nan
             if len(selected_counter_set) == 1:
-                attach_counter_values(label_rows, rows, selected_counter_set[0], horizon)
-            scope_dir = _scope_output_dir(output_dir, scope)
-            write_csv_rows(scope_dir / f"counter_sequence_{family}.csv", label_rows)
-            low, high = thresholds.get("global", (math.nan, math.nan)) if scope == "global" else (math.nan, math.nan)
+                selected_counter = selected_counter_set[0]
+                source_path = _counter_sequence_path(scope_dir, selected_counter)
+                if source_path.exists():
+                    copyfile(source_path, family_path)
+                    label_rows = load_csv_rows(family_path)
+                    if scope == "global":
+                        values = counter_value_series(rows, selected_counter)
+                        low, high = thresholds_for_family(values, rows, split.split_by_run, scope).get("global", (math.nan, math.nan))
+                    source = "ablation_selected"
+                else:
+                    source = "selected_counter_sequence_missing"
+                    if family_path.exists():
+                        family_path.unlink()
+            elif family_path.exists():
+                family_path.unlink()
             summary_rows.append(
                 {
                     "experiment": split.name,
@@ -449,7 +473,7 @@ def build_counter_sequences_for_split(
                     "available_counters": ",".join(availability.get(family, [])),
                     "available": int(bool(availability.get(family, []))),
                     "selected_counters": ",".join(selected_counter_set),
-                    "sequence_source": "ablation_selected" if selected_counter_set else "family_default",
+                    "sequence_source": source,
                     "counter_sequence_files_written": counter_files_written,
                     "global_low_threshold": "" if not np.isfinite(low) else low,
                     "global_high_threshold": "" if not np.isfinite(high) else high,
@@ -465,6 +489,7 @@ def build_counter_sequences_for_split(
             "threshold_mode": threshold_mode,
             "horizon": horizon,
             "rows": len(rows),
+            "family_sequences_written": write_family_sequences,
             "family_availability": availability,
             "selected_counters_by_scope": selected_counters_by_scope or {},
         },
@@ -488,11 +513,13 @@ def build_counter_sequences(
     seed: int,
     ablation_results: Path | None = None,
     require_ablation_coverage: bool = False,
+    write_family_sequences: bool | None = None,
 ) -> list[dict[str, object]]:
     """Top-level entrypoint used by the CLI and orchestration pipeline."""
 
     rows = parsec_rows(input_csv)
     splits = build_experiment_splits(rows, experiment_mode, train_fraction, val_fraction, seed)
+    should_write_family_sequences = bool(ablation_results and ablation_results.exists()) if write_family_sequences is None else write_family_sequences
     selections: SelectedCounterMap = {}
     global_one_per_family: SelectedCounterMap = {}
     if ablation_results and ablation_results.exists():
@@ -512,7 +539,7 @@ def build_counter_sequences(
                     if selected_counters_by_scope.get(scope, {}).get(family, []):
                         continue
                     print(
-                        f"[sequences] experiment={split.name} scope={scope} family={family} no counter selected from ablation; using family_default features",
+                        f"[sequences] experiment={split.name} scope={scope} family={family} no single counter selected from ablation; no family sequence will be written",
                         flush=True,
                     )
         if require_ablation_coverage and ablation_results and ablation_results.exists():
@@ -532,6 +559,7 @@ def build_counter_sequences(
                 horizon,
                 threshold_mode,
                 selected_counters_by_scope=selected_counters_by_scope,
+                write_family_sequences=should_write_family_sequences,
             )
         )
     write_csv_rows(output_root / "counter_sequence_runs.csv", summaries)
