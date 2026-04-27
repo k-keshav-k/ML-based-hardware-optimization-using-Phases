@@ -19,6 +19,7 @@ from hpc_phase_analysis.io_utils import load_csv_rows, write_csv_rows, write_jso
 from .data import load_scope_family_data, states_matrix
 from .metrics import classification_metrics
 from .teacher import _build_examples
+from .transformer_model import build_family_transformer, require_torch
 from .tree import DecisionTree
 
 
@@ -217,6 +218,48 @@ def _teacher_targets(
     return target, valid
 
 
+def _teacher_checkpoint_path(teacher_predictions_path: Path, family: str) -> Path:
+    return teacher_predictions_path.parent / "teacher_checkpoints" / f"{family}.pt"
+
+
+def _predict_teacher_checkpoint(checkpoint_path: Path, x: np.ndarray, batch_size: int = 1024) -> np.ndarray:
+    torch, _ = require_torch()
+    checkpoint = torch.load(checkpoint_path, map_location="cpu")
+    model = build_family_transformer(
+        input_dim=int(checkpoint["input_dim"]),
+        horizon=int(checkpoint["horizon"]),
+        num_classes=int(checkpoint.get("num_classes", 3)),
+        config=dict(checkpoint["config"]),
+    )
+    model.load_state_dict(checkpoint["state_dict"])
+    model.eval()
+    parts: list[np.ndarray] = []
+    with torch.no_grad():
+        for start in range(0, x.shape[0], batch_size):
+            xb = torch.tensor(x[start : start + batch_size], dtype=torch.float32)
+            parts.append(model(xb).argmax(dim=2).cpu().numpy().astype(int))
+    return np.concatenate(parts, axis=0) if parts else np.empty((0, int(checkpoint["horizon"])), dtype=int)
+
+
+def _synthetic_histories(real_train: np.ndarray, count: int, mutation_rate: float, seed: int) -> np.ndarray:
+    """Sample plausible state histories by lightly perturbing real train windows."""
+
+    if real_train.shape[0] == 0 or count <= 0:
+        return np.empty((0,) + real_train.shape[1:], dtype=float)
+    rng = np.random.default_rng(seed)
+    output = real_train[rng.integers(0, real_train.shape[0], size=count)].copy()
+    groups = output.shape[2] // 3
+    if groups <= 0 or mutation_rate <= 0.0:
+        return output
+    mutate = rng.random((output.shape[0], output.shape[1], groups)) < mutation_rate
+    for row, step, group in np.argwhere(mutate):
+        start = int(group) * 3
+        cls = int(rng.integers(0, 3))
+        output[row, step, start : start + 3] = 0.0
+        output[row, step, start + cls] = 1.0
+    return output
+
+
 def train_students_for_experiment(
     experiment_dir: Path,
     scope: str,
@@ -228,6 +271,9 @@ def train_students_for_experiment(
     tree_max_depth: int,
     tree_min_leaf: int,
     run_length_buckets: list[int],
+    synthetic_examples_per_family: int = 0,
+    synthetic_mutation_rate: float = 0.05,
+    seed: int = 17,
 ) -> list[dict[str, object]]:
     """Train decision-tree and lookup students for each family."""
 
@@ -342,6 +388,25 @@ def train_students_for_experiment(
                 "lookup_distilled_history": np.full((x_hist.shape[0], horizon), -1, dtype=int),
                 "decision_tree_scratch_history": np.full((x_hist.shape[0], horizon), -1, dtype=int),
             }
+            checkpoint_path = _teacher_checkpoint_path(teacher_predictions_path, family)
+            synthetic_x = np.empty((0,) + x_hist.shape[1:], dtype=float)
+            synthetic_pred = np.empty((0, horizon), dtype=int)
+            if synthetic_examples_per_family > 0 and checkpoint_path.exists():
+                synthetic_x = _synthetic_histories(
+                    x_hist[train_hist],
+                    synthetic_examples_per_family,
+                    synthetic_mutation_rate,
+                    seed + family_index,
+                )
+                if synthetic_x.shape[0] > 0:
+                    try:
+                        synthetic_pred = _predict_teacher_checkpoint(checkpoint_path, synthetic_x)
+                        hist_preds["synthetic_distilled_history_tree"] = np.full((x_hist.shape[0], horizon), -1, dtype=int)
+                    except SystemExit as exc:
+                        print(
+                            f"[students] family={family} synthetic_distilled_history_tree skipped: {exc}",
+                            flush=True,
+                        )
             lookup_entries_by_step: list[int] = []
 
             for step in range(1, horizon + 1):
@@ -369,6 +434,14 @@ def train_students_for_experiment(
                     hist_preds["lookup_distilled_history"][:, step - 1] = lookup.predict(x_hist)
                     lookup_entries_by_step.append(sum(len(table) for table in lookup.tables))
 
+                    if "synthetic_distilled_history_tree" in hist_preds and synthetic_pred.shape[0] > 0:
+                        synth_step = synthetic_pred[:, step - 1].astype(int)
+                        combined_x = np.vstack([hist_features[distill_fit], synthetic_x.reshape(synthetic_x.shape[0], -1)])
+                        combined_y = np.concatenate([teacher_target[distill_fit], synth_step])
+                        synthetic_tree = DecisionTree(max_depth=tree_max_depth, min_samples_leaf=tree_min_leaf)
+                        synthetic_tree.fit(combined_x, combined_y)
+                        hist_preds["synthetic_distilled_history_tree"][:, step - 1] = synthetic_tree.predict(hist_features)
+
             teacher_h1, valid_teacher_h1 = _teacher_targets(family, row_ids_hist, 1, hard_teacher)
             for model_name, preds in hist_preds.items():
                 metrics = classification_metrics(y_hist[eval_hist, 0], preds[eval_hist, 0], current_state=current_hist[eval_hist])
@@ -382,6 +455,8 @@ def train_students_for_experiment(
                         "feature_source": "state_history",
                         "context_mode": context_mode,
                         "history_length": history_length,
+                        "synthetic_examples": synthetic_examples_per_family if model_name == "synthetic_distilled_history_tree" else "",
+                        "synthetic_mutation_rate": synthetic_mutation_rate if model_name == "synthetic_distilled_history_tree" else "",
                         **metrics,
                         "teacher_retention": retention,
                         "tree_depth": tree_max_depth if "decision_tree" in model_name else "",

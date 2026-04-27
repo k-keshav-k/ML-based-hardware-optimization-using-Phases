@@ -45,6 +45,9 @@ def main() -> None:
                 tree_max_depth=int(config["student"]["decision_tree_max_depth"]),
                 tree_min_leaf=int(config["student"]["decision_tree_min_samples_leaf"]),
                 run_length_buckets=[int(item) for item in config["student"]["run_length_buckets"]],
+                synthetic_examples_per_family=int(config["student"].get("synthetic_examples_per_family", 0)),
+                synthetic_mutation_rate=float(config["student"].get("synthetic_mutation_rate", 0.05)),
+                seed=int(config["random_seed"]),
             )
             for row in rows:
                 item = dict(row)

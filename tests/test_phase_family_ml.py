@@ -450,6 +450,10 @@ class PhaseFamilyMLTests(unittest.TestCase):
             self.assertTrue((root / "teacher" / "teacher_predictions.csv").exists())
 
     def test_student_training_writes_history_distillation_models(self) -> None:
+        try:
+            torch, _ = require_torch()
+        except SystemExit:
+            self.skipTest("PyTorch not available")
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             merged = root / "merged.csv"
@@ -499,6 +503,25 @@ class PhaseFamilyMLTests(unittest.TestCase):
                         item[f"p_future_state_1_class_{cls}"] = 1.0 if cls == target else 0.0
                     teacher_rows.append(item)
             write_csv_rows(root / "teacher_predictions.csv", teacher_rows)
+            checkpoint_dir = root / "teacher_checkpoints"
+            checkpoint_dir.mkdir()
+            teacher_cfg = {"hidden_dim": 32, "num_layers": 1, "num_heads": 4, "ff_dim": 64, "dropout": 0.0, "rope_theta": 10000.0}
+            input_dim = len(FAMILY_COUNTERS) * 3
+            for family in FAMILY_COUNTERS:
+                model = build_family_transformer(input_dim=input_dim, horizon=1, num_classes=3, config=teacher_cfg)
+                torch.save(
+                    {
+                        "state_dict": model.state_dict(),
+                        "input_dim": input_dim,
+                        "horizon": 1,
+                        "num_classes": 3,
+                        "config": teacher_cfg,
+                        "context_mode": "with_context",
+                        "family": family,
+                        "history_length": 4,
+                    },
+                    checkpoint_dir / f"{family}.pt",
+                )
 
             rows = train_students_for_experiment(
                 experiment_dir=root / "sequences" / "pooled_run_group",
@@ -511,13 +534,18 @@ class PhaseFamilyMLTests(unittest.TestCase):
                 tree_max_depth=3,
                 tree_min_leaf=2,
                 run_length_buckets=[1, 3, 7],
+                synthetic_examples_per_family=8,
+                synthetic_mutation_rate=0.05,
+                seed=7,
             )
             models = {row.get("model") for row in rows}
             self.assertIn("decision_tree_distilled_history", models)
             self.assertIn("lookup_distilled_history", models)
             self.assertIn("decision_tree_scratch_history", models)
+            self.assertIn("synthetic_distilled_history_tree", models)
             pred_models = {row.get("model") for row in load_csv_rows(root / "students" / "student_predictions.csv")}
             self.assertIn("decision_tree_scratch_history", pred_models)
+            self.assertIn("synthetic_distilled_history_tree", pred_models)
 
 
 if __name__ == "__main__":

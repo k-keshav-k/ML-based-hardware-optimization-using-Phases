@@ -58,6 +58,8 @@ DEFAULT_FAMILY_ML_CONFIG: dict[str, Any] = {
         "decision_tree_max_depth": 6,
         "decision_tree_min_samples_leaf": 8,
         "run_length_buckets": [1, 3, 7, 15],
+        "synthetic_examples_per_family": 20000,
+        "synthetic_mutation_rate": 0.05,
     },
     "experiments": {
         "modes": ["pooled_run_group"],

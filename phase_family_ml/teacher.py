@@ -241,9 +241,12 @@ def train_teachers_for_experiment(
         return []
     summaries: list[dict[str, object]] = []
     prediction_rows: list[dict[str, object]] = []
+    checkpoint_dir = ensure_dir(output_dir / "teacher_checkpoints")
     for family_index, family in enumerate(families):
         best = {
             "score": -1.0,
+            "model": None,
+            "input_dim": 0,
             "context_mode": "",
             "metrics": {},
             "pred": np.empty((0, horizon), dtype=int),
@@ -282,7 +285,7 @@ def train_teachers_for_experiment(
                 f"{log_prefix} start rows={x.shape[0]} history={history_length} horizons={horizon}",
                 flush=True,
             )
-            _, logits = _train_model(x, y, split_local, teacher_config, seed + family_index, log_prefix=log_prefix)
+            model, logits = _train_model(x, y, split_local, teacher_config, seed + family_index, log_prefix=log_prefix)
             logits_shifted = logits - logits.max(axis=2, keepdims=True)
             exp = np.exp(logits_shifted)
             prob = exp / np.maximum(exp.sum(axis=2, keepdims=True), 1e-12)
@@ -297,6 +300,8 @@ def train_teachers_for_experiment(
             if score > best["score"]:
                 best = {
                     "score": score,
+                    "model": model,
+                    "input_dim": int(x.shape[2]),
                     "context_mode": str(context_mode),
                     "metrics": metrics,
                     "pred": pred,
@@ -329,6 +334,22 @@ def train_teachers_for_experiment(
         current_local = best["current"]
         meta_local = best["meta"]
         row_ids = best["row_ids"]
+        checkpoint_path = checkpoint_dir / f"{family}.pt"
+        if best.get("model") is not None:
+            torch, _ = require_torch()
+            torch.save(
+                {
+                    "state_dict": best["model"].state_dict(),
+                    "input_dim": int(best["input_dim"]),
+                    "horizon": int(horizon),
+                    "num_classes": 3,
+                    "config": dict(teacher_config),
+                    "context_mode": best["context_mode"],
+                    "family": family,
+                    "history_length": int(history_length),
+                },
+                checkpoint_path,
+            )
         for idx in range(pred.shape[0]):
             item: dict[str, object] = {
                 "family": family,
@@ -354,6 +375,7 @@ def train_teachers_for_experiment(
             "counters": counter_text,
             "rows": int(pred.shape[0]),
             "validation_score": float(best["score"]),
+            "checkpoint_path": str(checkpoint_path),
         }
         summary_row.update(best["metrics"])
         summaries.append(summary_row)
