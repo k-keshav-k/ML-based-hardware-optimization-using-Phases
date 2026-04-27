@@ -29,10 +29,10 @@ export UV_LINK_MODE=\${UV_LINK_MODE:-copy}
 export UV_PROJECT_ENVIRONMENT=\${UV_PROJECT_ENVIRONMENT:-.venv}
 
 export PHASE_FAMILY_ML_CONFIG=\${PHASE_FAMILY_ML_CONFIG:-config/phase_family_ml_defaults.json}
-export DATASET_INPUT_CSV=\${DATASET_INPUT_CSV:-}
-export COUNTER_SEQUENCES_ROOT=\${COUNTER_SEQUENCES_ROOT:-}
-export TEACHER_OUTPUT_ROOT=\${TEACHER_OUTPUT_ROOT:-}
-export ABLATION_RESULTS_CSV=\${ABLATION_RESULTS_CSV:-}
+export DATASET_INPUT_CSV=\${DATASET_INPUT_CSV:-results/processed/merged_interval_dataset.csv}
+export COUNTER_SEQUENCES_ROOT=\${COUNTER_SEQUENCES_ROOT:-results/phase_family_ml/counter_sequences/pooled_run_group/threshold_global/counter_value_sequences}
+export TEACHER_OUTPUT_ROOT=\${TEACHER_OUTPUT_ROOT:-teacher/}
+export ABLATION_RESULTS_CSV=\${ABLATION_RESULTS_CSV:-results/phase_family_ml/ablation/family_ablation_results.csv}
 
 # Sequence-stage controls.
 export SKIP_SEQUENCE_BUILD=\${SKIP_SEQUENCE_BUILD:-auto}   # auto | 0 | 1
