@@ -17,6 +17,8 @@ from hpc_phase_analysis.io_utils import ensure_dir, load_csv_rows, safe_float, w
 from .families import FAMILY_COUNTERS, derive_feature_values, derived_columns_for_family, family_counter_availability
 from .splits import ExperimentSplit, build_experiment_splits
 
+SelectedCounterMap = dict[tuple[str, str], dict[str, list[str]]]
+
 
 def parsec_rows(input_csv: Path) -> list[dict[str, str]]:
     """Load only PARSEC rows so behavior matches the existing phase_ml policy."""
@@ -54,29 +56,113 @@ def build_derived_matrix(rows: list[dict[str, str]]) -> tuple[list[dict[str, flo
     return derived_rows, by_column
 
 
-def family_usage_scores(rows: list[dict[str, str]]) -> dict[str, np.ndarray]:
+def _rowwise_nanmean(stacked: np.ndarray, row_count: int) -> np.ndarray:
+    """Return a NaN-safe row-wise mean vector with stable output length."""
+
+    if stacked.size == 0:
+        return np.full(row_count, np.nan, dtype=float)
+    finite = np.isfinite(stacked)
+    counts = finite.sum(axis=1)
+    sums = np.nansum(stacked, axis=1)
+    values = np.full(stacked.shape[0], np.nan, dtype=float)
+    mask = counts > 0
+    values[mask] = sums[mask] / counts[mask]
+    return values
+
+
+def _selected_counter_score(rows: list[dict[str, str]], counters: list[str]) -> np.ndarray:
+    """Build one usage score from selected raw counters only.
+
+    We compress values with ``log1p`` so mixed-scale counters can still be
+    averaged without one very large magnitude counter dominating.
+    """
+
+    stacked = np.full((len(rows), len(counters)), np.nan, dtype=float)
+    for row_index, row in enumerate(rows):
+        for col_index, counter in enumerate(counters):
+            value = safe_float(row.get(counter, ""))
+            if np.isfinite(value) and value >= 0.0:
+                stacked[row_index, col_index] = math.log1p(value)
+    return _rowwise_nanmean(stacked, len(rows))
+
+
+def family_usage_scores(rows: list[dict[str, str]], selected_counters_by_family: dict[str, list[str]] | None = None) -> dict[str, np.ndarray]:
     """Aggregate derived features into one interpretable score per family.
 
-    Each family score is the nanmean of its derived columns.
+    Default behavior: each family score is the nanmean of its derived columns.
+    If ``selected_counters_by_family`` is provided for a family, we instead use
+    only those selected raw counters to build the score.
     """
 
     _derived_rows, by_column = build_derived_matrix(rows)
+    present_counter_columns = {key for row in rows for key in row.keys() if key.startswith("counter__")}
     output: dict[str, np.ndarray] = {}
     for family in FAMILY_COUNTERS:
+        selected = selected_counters_by_family.get(family, []) if selected_counters_by_family else []
+        selected_present = [counter for counter in selected if counter in present_counter_columns]
+        if selected:
+            if not selected_present:
+                output[family] = np.full(len(rows), np.nan, dtype=float)
+                continue
+            output[family] = _selected_counter_score(rows, selected_present)
+            continue
         columns = derived_columns_for_family(family)
         present = [column for column in columns if column in by_column]
         if not present:
             output[family] = np.full(len(rows), np.nan, dtype=float)
             continue
         stacked = np.vstack([by_column[column] for column in present]).T
-        finite = np.isfinite(stacked)
-        counts = finite.sum(axis=1)
-        sums = np.nansum(stacked, axis=1)
-        values = np.full(stacked.shape[0], np.nan, dtype=float)
-        mask = counts > 0
-        values[mask] = sums[mask] / counts[mask]
-        output[family] = values
+        output[family] = _rowwise_nanmean(stacked, len(rows))
     return output
+
+
+def _parse_counter_set(counter_set: str) -> list[str]:
+    """Split and clean a CSV-style counter set string."""
+
+    return [item.strip() for item in str(counter_set).split(",") if item.strip()]
+
+
+def load_ablation_selected_counters(ablation_results: Path) -> SelectedCounterMap:
+    """Load selected per-family counter sets from ablation results CSV."""
+
+    rows = load_csv_rows(ablation_results)
+    selected: SelectedCounterMap = {}
+    selected_scores: dict[tuple[str, str, str], float] = {}
+    for row in rows:
+        family = str(row.get("family", "")).strip()
+        if family in {"", "__global__"}:
+            continue
+        if int(row.get("selected", "0") or 0) != 1:
+            continue
+        if str(row.get("candidate_type", "")).strip() == "unavailable":
+            continue
+        counters = _parse_counter_set(str(row.get("counter_set", "")))
+        if not counters:
+            continue
+        experiment = str(row.get("experiment", "")).strip()
+        scope = str(row.get("scope", "")).strip()
+        score = safe_float(row.get("validation_score", ""))
+        key = (experiment, scope, family)
+        previous = selected_scores.get(key, -math.inf)
+        if score < previous:
+            continue
+        selected_scores[key] = score
+        selected.setdefault((experiment, scope), {})[family] = counters
+    return selected
+
+
+def resolve_selected_counters(selections: SelectedCounterMap, experiment: str, scope: str) -> dict[str, list[str]]:
+    """Resolve selected counter sets with exact match first then fallbacks."""
+
+    for key in [
+        (experiment, scope),
+        ("", scope),
+        (experiment, ""),
+        ("", ""),
+    ]:
+        if key in selections:
+            return dict(selections[key])
+    return {}
 
 
 def _tertiles(values: np.ndarray) -> tuple[float, float]:
@@ -196,23 +282,26 @@ def build_family_labels_for_split(
     output_dir: Path,
     horizon: int,
     threshold_mode: str,
+    selected_counters_by_scope: dict[str, dict[str, list[str]]] | None = None,
 ) -> dict[str, object]:
     """Generate labels for all families for one experiment split."""
 
     output_dir = ensure_dir(output_dir)
-    usage = family_usage_scores(rows)
     availability = family_counter_availability(rows)
     scopes = ["global", "per_workload"] if threshold_mode == "both" else [threshold_mode]
     summary_rows: list[dict[str, object]] = []
-    for family in FAMILY_COUNTERS:
-        values = usage.get(family, np.full(len(rows), np.nan, dtype=float))
-        thresholds = thresholds_for_family(values, rows, split.split_by_run, threshold_mode)
-        for scope in scopes:
+    for scope in scopes:
+        selected_for_scope = selected_counters_by_scope.get(scope, {}) if selected_counters_by_scope else {}
+        usage = family_usage_scores(rows, selected_for_scope)
+        for family in FAMILY_COUNTERS:
+            values = usage.get(family, np.full(len(rows), np.nan, dtype=float))
+            thresholds = thresholds_for_family(values, rows, split.split_by_run, scope)
             states = states_for_scope(values, rows, scope, thresholds)
             label_rows = build_family_label_rows(rows, states, split.split_by_run, horizon)
             scope_dir = _scope_output_dir(output_dir, scope)
             write_csv_rows(scope_dir / f"family_labels_{family}.csv", label_rows)
             low, high = thresholds.get("global", (math.nan, math.nan)) if scope == "global" else (math.nan, math.nan)
+            selected_counter_set = selected_for_scope.get(family, [])
             summary_rows.append(
                 {
                     "experiment": split.name,
@@ -222,6 +311,8 @@ def build_family_labels_for_split(
                     "rows": len(label_rows),
                     "available_counters": ",".join(availability.get(family, [])),
                     "available": int(bool(availability.get(family, []))),
+                    "selected_counters": ",".join(selected_counter_set),
+                    "label_source": "ablation_selected" if selected_counter_set else "family_default",
                     "global_low_threshold": "" if not np.isfinite(low) else low,
                     "global_high_threshold": "" if not np.isfinite(high) else high,
                 }
@@ -236,6 +327,7 @@ def build_family_labels_for_split(
             "horizon": horizon,
             "rows": len(rows),
             "family_availability": availability,
+            "selected_counters_by_scope": selected_counters_by_scope or {},
         },
     )
     return {
@@ -255,14 +347,29 @@ def build_family_labels(
     train_fraction: float,
     val_fraction: float,
     seed: int,
+    ablation_results: Path | None = None,
 ) -> list[dict[str, object]]:
     """Top-level entrypoint used by the CLI and orchestration pipeline."""
 
     rows = parsec_rows(input_csv)
     splits = build_experiment_splits(rows, experiment_mode, train_fraction, val_fraction, seed)
+    selections: SelectedCounterMap = {}
+    if ablation_results and ablation_results.exists():
+        selections = load_ablation_selected_counters(ablation_results)
     summaries: list[dict[str, object]] = []
     for split in splits:
         split_output = ensure_dir(output_root / split.name)
-        summaries.append(build_family_labels_for_split(rows, split, split_output, horizon, threshold_mode))
+        scopes = ["global", "per_workload"] if threshold_mode == "both" else [threshold_mode]
+        selected_counters_by_scope = {scope: resolve_selected_counters(selections, split.name, scope) for scope in scopes}
+        summaries.append(
+            build_family_labels_for_split(
+                rows,
+                split,
+                split_output,
+                horizon,
+                threshold_mode,
+                selected_counters_by_scope=selected_counters_by_scope,
+            )
+        )
     write_csv_rows(output_root / "family_label_runs.csv", summaries)
     return summaries

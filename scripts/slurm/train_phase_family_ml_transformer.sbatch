@@ -24,6 +24,7 @@ conda activate \${CONDA_ENV:-llmr}
 set -euo pipefail
 
 export PYTORCH_CUDA_ALLOC_CONF=\${PYTORCH_CUDA_ALLOC_CONF:-expandable_segments:True}
+export PYTHONUNBUFFERED=\${PYTHONUNBUFFERED:-1}
 export UV_LINK_MODE=\${UV_LINK_MODE:-copy}
 export UV_PROJECT_ENVIRONMENT=\${UV_PROJECT_ENVIRONMENT:-.venv}
 
@@ -31,6 +32,7 @@ export PHASE_FAMILY_ML_CONFIG=\${PHASE_FAMILY_ML_CONFIG:-config/phase_family_ml_
 export DATASET_INPUT_CSV=\${DATASET_INPUT_CSV:-}
 export FAMILY_LABELS_ROOT=\${FAMILY_LABELS_ROOT:-}
 export TEACHER_OUTPUT_ROOT=\${TEACHER_OUTPUT_ROOT:-}
+export ABLATION_RESULTS_CSV=\${ABLATION_RESULTS_CSV:-}
 
 # Label-stage controls.
 export SKIP_LABEL_BUILD=\${SKIP_LABEL_BUILD:-auto}   # auto | 0 | 1
@@ -39,6 +41,7 @@ export THRESHOLD_MODE=\${THRESHOLD_MODE:-both}
 
 # Teacher training controls.
 export FULL=\${FULL:-0}                              # 0 quick profile, 1 full profile
+export SKIP_LABEL_REFRESH=\${SKIP_LABEL_REFRESH:-0}  # 0 rebuild labels from ablation before teacher, 1 skip
 
 cd \${PROJECT_DIR:-/scratch/kk6081/Phase-pipeline/ML-based-hardware-optimization-using-Phases}
 mkdir -p logs
@@ -62,6 +65,9 @@ fi
 if [[ -z \"\${TEACHER_OUTPUT_ROOT}\" ]]; then
   TEACHER_OUTPUT_ROOT=\"\${RUN_ROOT}/teacher\"
 fi
+if [[ -z \"\${ABLATION_RESULTS_CSV}\" ]]; then
+  ABLATION_RESULTS_CSV=\"\${RUN_ROOT}/ablation/family_ablation_results.csv\"
+fi
 
 mkdir -p \"\${FAMILY_LABELS_ROOT}\" \"\${TEACHER_OUTPUT_ROOT}\"
 
@@ -69,10 +75,13 @@ echo \"RUN_ROOT=\${RUN_ROOT}\"
 echo \"DATASET_INPUT_CSV=\${DATASET_INPUT_CSV:-<from config>}\"
 echo \"FAMILY_LABELS_ROOT=\${FAMILY_LABELS_ROOT}\"
 echo \"TEACHER_OUTPUT_ROOT=\${TEACHER_OUTPUT_ROOT}\"
+echo \"ABLATION_RESULTS_CSV=\${ABLATION_RESULTS_CSV}\"
 echo \"SKIP_LABEL_BUILD=\${SKIP_LABEL_BUILD}\"
 echo \"EXPERIMENT_MODE=\${EXPERIMENT_MODE}\"
 echo \"THRESHOLD_MODE=\${THRESHOLD_MODE}\"
 echo \"FULL=\${FULL}\"
+echo \"SKIP_LABEL_REFRESH=\${SKIP_LABEL_REFRESH}\"
+echo \"PYTHONUNBUFFERED=\${PYTHONUNBUFFERED}\"
 
 if [[ \"\${SKIP_LABEL_BUILD}\" == \"1\" ]] || { [[ \"\${SKIP_LABEL_BUILD}\" == \"auto\" ]] && uv run python -c \"import os; from pathlib import Path; root=Path(os.environ['FAMILY_LABELS_ROOT']); manifests=list(root.glob('*/family_label_manifest.json')); raise SystemExit(0 if manifests else 1)\"; }; then
   echo 'Using existing family labels; skipping build_family_labels.'
@@ -90,6 +99,15 @@ fi
 
 # Train transformer teachers for all discovered experiment/scope directories.
 teacher_args=(--config \${PHASE_FAMILY_ML_CONFIG} --labels-root \${FAMILY_LABELS_ROOT} --output-dir \${TEACHER_OUTPUT_ROOT})
+if [[ -n \"\${DATASET_INPUT_CSV}\" ]]; then
+  teacher_args+=(--input \${DATASET_INPUT_CSV})
+fi
+teacher_args+=(--ablation-results \${ABLATION_RESULTS_CSV})
+teacher_args+=(--experiment-mode \${EXPERIMENT_MODE})
+teacher_args+=(--threshold-mode \${THRESHOLD_MODE})
+if [[ \"\${SKIP_LABEL_REFRESH}\" == \"1\" ]]; then
+  teacher_args+=(--skip-label-refresh)
+fi
 if [[ \"\${FULL}\" == \"1\" ]]; then
   teacher_args+=(--full)
 fi

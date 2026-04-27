@@ -9,7 +9,7 @@ from pathlib import Path
 
 import numpy as np
 
-from hpc_phase_analysis.io_utils import load_csv_rows
+from hpc_phase_analysis.io_utils import load_csv_rows, write_csv_rows
 from phase_family_ml.ablation import run_ablation
 from phase_family_ml.config import deep_update, load_config
 from phase_family_ml.families import FAMILY_COUNTERS, assert_no_forbidden_counter_columns
@@ -164,6 +164,61 @@ class PhaseFamilyMLTests(unittest.TestCase):
             self.assertIn("workload", first)
             self.assertIn("run_id", first)
             self.assertIn("core_id", first)
+
+    def test_labels_use_ablation_selected_counters_for_teacher_states(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            merged = root / "merged.csv"
+            write_fixture(merged)
+
+            build_family_labels(
+                input_csv=merged,
+                output_root=root / "labels_default",
+                horizon=20,
+                threshold_mode="global",
+                experiment_mode="pooled_run_group",
+                train_fraction=0.7,
+                val_fraction=0.15,
+                seed=7,
+            )
+            default_rows = load_csv_rows(root / "labels_default" / "pooled_run_group" / "threshold_global" / "family_labels_core_fp.csv")
+            default_states = [int(row.get("family_state", "-1") or -1) for row in default_rows]
+
+            # Provide one selected counter per family exactly as the ablation output
+            # schema does, then rebuild labels from that selection.
+            write_csv_rows(
+                root / "ablation.csv",
+                [
+                    {"experiment": "pooled_run_group", "scope": "global", "family": "L1", "candidate_type": "singleton", "counter_set": "counter__l1d_loads", "selected": 1, "validation_score": 0.7},
+                    {"experiment": "pooled_run_group", "scope": "global", "family": "L2", "candidate_type": "singleton", "counter_set": "counter__l2_misses", "selected": 1, "validation_score": 0.7},
+                    {"experiment": "pooled_run_group", "scope": "global", "family": "LLC", "candidate_type": "singleton", "counter_set": "counter__llc_references", "selected": 1, "validation_score": 0.7},
+                    {"experiment": "pooled_run_group", "scope": "global", "family": "memory_offcore", "candidate_type": "singleton", "counter_set": "counter__total_memory_bandwidth", "selected": 1, "validation_score": 0.7},
+                    {"experiment": "pooled_run_group", "scope": "global", "family": "branch_control", "candidate_type": "singleton", "counter_set": "counter__branch_instructions", "selected": 1, "validation_score": 0.7},
+                    {"experiment": "pooled_run_group", "scope": "global", "family": "core_fp", "candidate_type": "singleton", "counter_set": "counter__fp_arithmetic", "selected": 1, "validation_score": 0.7},
+                ],
+            )
+
+            build_family_labels(
+                input_csv=merged,
+                output_root=root / "labels_selected",
+                horizon=20,
+                threshold_mode="global",
+                experiment_mode="pooled_run_group",
+                train_fraction=0.7,
+                val_fraction=0.15,
+                seed=7,
+                ablation_results=root / "ablation.csv",
+            )
+            selected_rows = load_csv_rows(root / "labels_selected" / "pooled_run_group" / "threshold_global" / "family_labels_core_fp.csv")
+            selected_states = [int(row.get("family_state", "-1") or -1) for row in selected_rows]
+
+            self.assertEqual(len(default_states), len(selected_states))
+            self.assertTrue(any(a != b for a, b in zip(default_states, selected_states)))
+
+            summary_rows = load_csv_rows(root / "labels_selected" / "pooled_run_group" / "family_label_summary.csv")
+            core_row = next(row for row in summary_rows if row.get("family", "") == "core_fp" and row.get("scope", "") == "global")
+            self.assertEqual(core_row.get("label_source", ""), "ablation_selected")
+            self.assertEqual(core_row.get("selected_counters", ""), "counter__fp_arithmetic")
 
     def test_ablation_singleton_all_and_global_exhaustive(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

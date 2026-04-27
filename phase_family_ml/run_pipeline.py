@@ -70,6 +70,20 @@ def main() -> None:
                 ablation_rows.append(item)
     write_csv_rows(ablation_root / "family_ablation_results.csv", ablation_rows)
 
+    # Rebuild labels using the selected per-family counter sets from ablation so
+    # teacher training is grounded in the final chosen counters.
+    build_family_labels(
+        input_csv=input_csv,
+        output_root=labels_root,
+        horizon=int(dataset_cfg["horizon"]),
+        threshold_mode=str(args.threshold_mode or config["families"]["threshold_mode"]),
+        experiment_mode=str(args.experiment_mode or config["experiments"]["default_mode"]),
+        train_fraction=float(config["splits"]["train_fraction"]),
+        val_fraction=float(config["splits"]["val_fraction"]),
+        seed=int(config["random_seed"]),
+        ablation_results=ablation_root / "family_ablation_results.csv",
+    )
+
     for exp_dir in experiment_dirs(labels_root):
         for scope in scopes_for_experiment(exp_dir):
             teacher_dir = teacher_root / exp_dir.name / scope

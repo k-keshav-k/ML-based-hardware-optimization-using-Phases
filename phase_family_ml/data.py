@@ -27,10 +27,15 @@ def load_family_labels(path: Path, horizon: int) -> FamilyLabelData:
 
     rows = load_csv_rows(path)
     family_state = np.asarray([int(row.get("family_state", "-1") or -1) for row in rows], dtype=int)
-    future_states = np.asarray(
-        [[int(row.get(f"future_state_{step}", "-1") or -1) for step in range(1, horizon + 1)] for row in rows],
-        dtype=int,
-    )
+    if rows:
+        future_states = np.asarray(
+            [[int(row.get(f"future_state_{step}", "-1") or -1) for step in range(1, horizon + 1)] for row in rows],
+            dtype=int,
+        )
+    else:
+        # Keep a stable 2-D shape even for empty CSVs so downstream slicing
+        # like `future_states[:, 0]` remains valid.
+        future_states = np.empty((0, horizon), dtype=int)
     split = np.asarray([row.get("split", "train") for row in rows])
     return FamilyLabelData(rows=rows, family_state=family_state, future_states=future_states, split=split)
 

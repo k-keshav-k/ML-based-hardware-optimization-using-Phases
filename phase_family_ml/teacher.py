@@ -8,7 +8,7 @@ from pathlib import Path
 
 import numpy as np
 
-from hpc_phase_analysis.io_utils import ensure_dir, write_csv_rows, write_json
+from hpc_phase_analysis.io_utils import ensure_dir, load_csv_rows, write_csv_rows, write_json
 
 from .data import load_scope_family_data, states_matrix
 from .metrics import classification_metrics
@@ -105,7 +105,44 @@ def _weighted_score(metrics: dict[str, float]) -> float:
     return 0.4 * float(metrics.get("accuracy", 0.0)) + 0.4 * float(metrics.get("phase_change_f1", 0.0)) + 0.2 * float(metrics.get("high_usage_recall", 0.0))
 
 
-def _train_model(x: np.ndarray, y: np.ndarray, split: np.ndarray, model_cfg: dict[str, object], seed: int) -> tuple[object, np.ndarray]:
+def _average_ce_loss(
+    model: object,
+    x: np.ndarray,
+    y: np.ndarray,
+    indices: np.ndarray,
+    batch_size: int,
+    ce: object,
+    device: object,
+    torch: object,
+) -> float:
+    """Compute average multi-horizon CE over one index slice."""
+
+    if indices.size == 0:
+        return math.nan
+    total = 0.0
+    count = 0
+    model.eval()
+    with torch.no_grad():
+        for start in range(0, indices.size, batch_size):
+            idx = indices[start : start + batch_size]
+            xb = torch.tensor(x[idx], dtype=torch.float32, device=device)
+            yb = torch.tensor(y[idx], dtype=torch.long, device=device)
+            logits = model(xb)
+            losses = [ce(logits[:, h, :], yb[:, h]) for h in range(y.shape[1])]
+            loss = sum(losses) / max(1, len(losses))
+            total += float(loss.item()) * idx.size
+            count += int(idx.size)
+    return total / max(1, count)
+
+
+def _train_model(
+    x: np.ndarray,
+    y: np.ndarray,
+    split: np.ndarray,
+    model_cfg: dict[str, object],
+    seed: int,
+    log_prefix: str,
+) -> tuple[object, np.ndarray]:
     """Train one transformer and return logits for all rows."""
 
     torch, nn = require_torch()
@@ -123,10 +160,13 @@ def _train_model(x: np.ndarray, y: np.ndarray, split: np.ndarray, model_cfg: dic
     train_index = np.where(train_mask)[0]
     if train_index.size == 0:
         train_index = np.arange(x.shape[0])
+    val_index = np.where(_eval_mask(split))[0]
     ce = nn.CrossEntropyLoss()
-    for _ in range(epochs):
+    for epoch in range(epochs):
         np.random.shuffle(train_index)
         model.train()
+        epoch_total = 0.0
+        epoch_count = 0
         for start in range(0, train_index.size, batch_size):
             idx = train_index[start : start + batch_size]
             xb = torch.tensor(x[idx], dtype=torch.float32, device=device)
@@ -138,6 +178,15 @@ def _train_model(x: np.ndarray, y: np.ndarray, split: np.ndarray, model_cfg: dic
             loss = sum(losses) / max(1, len(losses))
             loss.backward()
             optimizer.step()
+            epoch_total += float(loss.item()) * idx.size
+            epoch_count += int(idx.size)
+        train_loss = epoch_total / max(1, epoch_count)
+        val_loss = _average_ce_loss(model, x, y, val_index, batch_size, ce, device, torch)
+        val_text = f"{val_loss:.6f}" if np.isfinite(val_loss) else "nan"
+        print(
+            f"{log_prefix} epoch={epoch + 1}/{epochs} train_loss={train_loss:.6f} val_loss={val_text} train_rows={train_index.size} val_rows={val_index.size}",
+            flush=True,
+        )
     model.eval()
     parts: list[np.ndarray] = []
     with torch.no_grad():
@@ -147,6 +196,26 @@ def _train_model(x: np.ndarray, y: np.ndarray, split: np.ndarray, model_cfg: dic
             parts.append(logits.cpu().numpy())
     logits_np = np.concatenate(parts, axis=0) if parts else np.zeros((0, y.shape[1], 3), dtype=float)
     return model, logits_np
+
+
+def _family_counter_map(experiment_dir: Path, scope: str) -> dict[str, str]:
+    """Read per-family selected counters used to generate current labels."""
+
+    summary_path = experiment_dir / "family_label_summary.csv"
+    if not summary_path.exists():
+        return {}
+    mapping: dict[str, str] = {}
+    for row in load_csv_rows(summary_path):
+        if str(row.get("scope", "")) != scope:
+            continue
+        family = str(row.get("family", ""))
+        selected = str(row.get("selected_counters", "")).strip()
+        source = str(row.get("label_source", "")).strip() or "family_default"
+        if selected:
+            mapping[family] = f"{selected} ({source})"
+        else:
+            mapping[family] = f"default_family_features ({source})"
+    return mapping
 
 
 def train_teachers_for_experiment(
@@ -162,6 +231,7 @@ def train_teachers_for_experiment(
 
     output_dir = ensure_dir(output_dir)
     family_data = load_scope_family_data(experiment_dir, scope, horizon)
+    counter_map = _family_counter_map(experiment_dir, scope)
     families, current, future, split, metadata_rows = states_matrix(family_data, horizon)
     if not families:
         return []
@@ -180,6 +250,11 @@ def train_teachers_for_experiment(
             "meta": [],
             "row_ids": np.empty(0, dtype=int),
         }
+        counter_text = counter_map.get(family, "default_family_features")
+        print(
+            f"[teacher] experiment={experiment_dir.name} scope={scope} family={family} counters={counter_text}",
+            flush=True,
+        )
         for context_mode in teacher_config.get("context_modes", ["without_context"]):
             x, y, split_local, current_local, meta_local, row_ids = _build_examples(
                 family_index,
@@ -191,8 +266,19 @@ def train_teachers_for_experiment(
                 str(context_mode),
             )
             if x.shape[0] == 0:
+                print(
+                    f"[teacher] experiment={experiment_dir.name} scope={scope} family={family} context={context_mode} skipped=no_examples",
+                    flush=True,
+                )
                 continue
-            _, logits = _train_model(x, y, split_local, teacher_config, seed + family_index)
+            log_prefix = (
+                f"[teacher] experiment={experiment_dir.name} scope={scope} family={family} context={context_mode}"
+            )
+            print(
+                f"{log_prefix} start rows={x.shape[0]} history={history_length} horizons={horizon}",
+                flush=True,
+            )
+            _, logits = _train_model(x, y, split_local, teacher_config, seed + family_index, log_prefix=log_prefix)
             logits_shifted = logits - logits.max(axis=2, keepdims=True)
             exp = np.exp(logits_shifted)
             prob = exp / np.maximum(exp.sum(axis=2, keepdims=True), 1e-12)
@@ -200,6 +286,10 @@ def train_teachers_for_experiment(
             eval_mask = _eval_mask(split_local)
             metrics = classification_metrics(y[eval_mask, 0], pred[eval_mask, 0], current_state=current_local[eval_mask])
             score = _weighted_score(metrics)
+            print(
+                f"{log_prefix} done score={score:.6f} accuracy={metrics.get('accuracy', 0.0):.4f} phase_change_f1={metrics.get('phase_change_f1', 0.0):.4f}",
+                flush=True,
+            )
             if score > best["score"]:
                 best = {
                     "score": score,
@@ -258,6 +348,7 @@ def train_teachers_for_experiment(
             "family": family,
             "scope": scope,
             "context_mode": best["context_mode"],
+            "counters": counter_text,
             "rows": int(pred.shape[0]),
             "validation_score": float(best["score"]),
         }

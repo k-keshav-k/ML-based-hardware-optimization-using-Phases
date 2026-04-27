@@ -60,6 +60,10 @@ thresholds, applies them to val/test, and writes one file per family:
 
 - `family_labels_<family>.csv`
 
+If `--ablation-results` is provided, label construction switches to the
+selected per-family counter set from `family_ablation_results.csv` so teacher
+training uses the ablation-finalized counter definitions.
+
 Each file includes:
 
 - `family_state`
@@ -86,6 +90,16 @@ Primary output:
 Trains family-wise transformer teachers (RoPE + causal multi-head attention +
 feedforward + layer norm), tries context on/off, and keeps best validation mode
 per family.
+
+By default, this command refreshes labels from ablation selections when
+`<dataset.output_dir>/ablation/family_ablation_results.csv` (or
+`--ablation-results`) exists. Use `--skip-label-refresh` to train from prebuilt
+labels unchanged.
+
+During training, logs now print:
+- current experiment/scope/family/context
+- counter set used for that family label stream
+- per-epoch `train_loss` and `val_loss`
 
 Primary outputs:
 
@@ -116,7 +130,8 @@ Primary outputs:
 - copy/export of `family_ablation_results.csv`
 
 ### `python -m phase_family_ml.run_pipeline`
-Runs labels -> ablation -> teacher -> students -> evaluation end-to-end.
+Runs labels -> ablation -> labels(refresh from selected counters) -> teacher ->
+students -> evaluation end-to-end.
 
 ## Setup
 
@@ -196,7 +211,9 @@ uv run -m phase_family_ml.run_ablation \
 # Train teachers
 uv run -m phase_family_ml.train_teacher \
   --config config/phase_family_ml_defaults.json \
+  --input results/processed_phase_family_ml_experiments/merged_interval_dataset.csv \
   --labels-root results/phase_family_ml/family_labels \
+  --ablation-results results/phase_family_ml/ablation/family_ablation_results.csv \
   --output-dir results/phase_family_ml/teacher
 
 # Train students
@@ -256,9 +273,11 @@ PHASE_FAMILY_ML_CONFIG=config/phase_family_ml_defaults.json \
 DATASET_INPUT_CSV=/scratch/kk6081/indep/processed_phase_ml_core_uncore_large/merged_interval_dataset.csv \
 FAMILY_LABELS_ROOT=/scratch/kk6081/indep/phase_family_ml/family_labels \
 TEACHER_OUTPUT_ROOT=/scratch/kk6081/indep/phase_family_ml/teacher \
+ABLATION_RESULTS_CSV=/scratch/kk6081/indep/phase_family_ml/ablation/family_ablation_results.csv \
 EXPERIMENT_MODE=all \
 THRESHOLD_MODE=both \
 SKIP_LABEL_BUILD=auto \
+SKIP_LABEL_REFRESH=0 \
 FULL=1 \
 sbatch scripts/slurm/train_phase_family_ml_transformer.sbatch
 ```

@@ -75,6 +75,8 @@ def _row_indices(label_rows: list[dict[str, str]]) -> np.ndarray:
 
 
 def _fit_predict_tree(x: np.ndarray, y: np.ndarray, split: np.ndarray, max_depth: int, min_leaf: int) -> np.ndarray:
+    if x.shape[0] == 0 or y.shape[0] == 0:
+        return np.empty(0, dtype=int)
     train = split == "train"
     if not np.any(train):
         train = np.ones(split.shape[0], dtype=bool)
@@ -105,9 +107,68 @@ def run_ablation(
     for family in sorted(family_data.keys()):
         labels = family_data[family]
         row_indices = _row_indices(labels.rows)
-        targets = labels.future_states[:, 0]
-        current = labels.family_state
-        split = labels.split
+        if row_indices.size == 0 or labels.future_states.shape[0] == 0:
+            output_rows.append(
+                {
+                    "family": family,
+                    "scope": scope,
+                    "candidate_type": "unavailable",
+                    "counter_set": "",
+                    "accuracy": 0.0,
+                    "macro_f1": 0.0,
+                    "phase_change_f1": 0.0,
+                    "high_usage_recall": 0.0,
+                    "validation_score": 0.0,
+                    "selected": 1,
+                    "note": "no_label_rows",
+                }
+            )
+            continue
+
+        # Guard against stale/mismatched row_index values when labels were
+        # produced from a different merged CSV than the one passed to ablation.
+        aligned = (row_indices >= 0) & (row_indices < len(rows))
+        if not np.any(aligned):
+            output_rows.append(
+                {
+                    "family": family,
+                    "scope": scope,
+                    "candidate_type": "unavailable",
+                    "counter_set": "",
+                    "accuracy": 0.0,
+                    "macro_f1": 0.0,
+                    "phase_change_f1": 0.0,
+                    "high_usage_recall": 0.0,
+                    "validation_score": 0.0,
+                    "selected": 1,
+                    "note": "row_index_mismatch",
+                }
+            )
+            continue
+        row_indices = row_indices[aligned]
+        targets = labels.future_states[aligned, 0]
+        current = labels.family_state[aligned]
+        split = labels.split[aligned]
+
+        # We need at least one valid (known) target to score this family.
+        valid_target = targets >= 0
+        if not np.any(valid_target):
+            output_rows.append(
+                {
+                    "family": family,
+                    "scope": scope,
+                    "candidate_type": "unavailable",
+                    "counter_set": "",
+                    "accuracy": 0.0,
+                    "macro_f1": 0.0,
+                    "phase_change_f1": 0.0,
+                    "high_usage_recall": 0.0,
+                    "validation_score": 0.0,
+                    "selected": 1,
+                    "note": "no_valid_targets",
+                }
+            )
+            continue
         eval_mask = _eval_mask(split)
         candidates = [counter for counter in FAMILY_COUNTERS.get(family, []) if counter in valid_counters]
         if not candidates:
@@ -139,7 +200,10 @@ def run_ablation(
             train_mask = split == "train"
             x = _fill_train_medians(x, train_mask)
             pred = _fit_predict_tree(x, targets, split, tree_max_depth, tree_min_samples_leaf)
-            metrics = classification_metrics(targets[eval_mask], pred[eval_mask], current_state=current[eval_mask])
+            usable = eval_mask & valid_target
+            if not np.any(usable):
+                usable = valid_target
+            metrics = classification_metrics(targets[usable], pred[usable], current_state=current[usable])
             score = _weighted_score(metrics, weights)
             key = ",".join(selected_counters)
             if score > best_score:
@@ -162,7 +226,14 @@ def run_ablation(
 
     # Cross-family exhaustive sweep: exactly one counter per family.
     if run_global_exhaustive:
-        families = [family for family in sorted(family_data.keys()) if any(counter in valid_counters for counter in FAMILY_COUNTERS.get(family, []))]
+        families = []
+        for family in sorted(family_data.keys()):
+            labels = family_data[family]
+            row_indices = _row_indices(labels.rows)
+            has_rows = row_indices.size > 0 and labels.future_states.shape[0] > 0
+            has_counters = any(counter in valid_counters for counter in FAMILY_COUNTERS.get(family, []))
+            if has_rows and has_counters:
+                families.append(family)
         family_counter_lists = []
         for family in families:
             options = [counter for counter in FAMILY_COUNTERS.get(family, []) if counter in valid_counters]
@@ -176,13 +247,25 @@ def run_ablation(
             for family in families:
                 labels = family_data[family]
                 row_indices = _row_indices(labels.rows)
+                aligned = (row_indices >= 0) & (row_indices < len(rows))
+                if not np.any(aligned):
+                    continue
+                row_indices = row_indices[aligned]
                 split = labels.split
+                split = split[aligned]
                 eval_mask = _eval_mask(split)
                 x = _counter_matrix(rows, selected)[row_indices]
                 x = _fill_train_medians(x, split == "train")
-                target = labels.future_states[:, 0]
+                target = labels.future_states[aligned, 0]
+                valid_target = target >= 0
+                if not np.any(valid_target):
+                    continue
                 pred = _fit_predict_tree(x, target, split, tree_max_depth, tree_min_samples_leaf)
-                metrics = classification_metrics(target[eval_mask], pred[eval_mask], current_state=labels.family_state[eval_mask])
+                current_state = labels.family_state[aligned]
+                usable = eval_mask & valid_target
+                if not np.any(usable):
+                    usable = valid_target
+                metrics = classification_metrics(target[usable], pred[usable], current_state=current_state[usable])
                 combo_metrics.append(_weighted_score(metrics, weights))
             aggregate = float(np.mean(combo_metrics)) if combo_metrics else 0.0
             combo_key = ",".join(selected)

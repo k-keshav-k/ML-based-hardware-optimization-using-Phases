@@ -14,6 +14,7 @@ def main() -> None:
     parser.add_argument("--config", default="")
     parser.add_argument("--input", default="")
     parser.add_argument("--output-dir", default="")
+    parser.add_argument("--ablation-results", default="")
     parser.add_argument("--horizon", type=int, default=0)
     parser.add_argument("--threshold-mode", choices=["global", "per_workload", "both"], default="")
     parser.add_argument("--experiment-mode", choices=["per_workload_holdout", "pooled_run_group", "leave_one_workload_out", "all"], default="")
@@ -31,6 +32,7 @@ def main() -> None:
         train_fraction=float(config["splits"]["train_fraction"]),
         val_fraction=float(config["splits"]["val_fraction"]),
         seed=int(config["random_seed"]),
+        ablation_results=Path(args.ablation_results) if args.ablation_results else None,
     )
     print(f"Built family labels for {len(summaries)} experiment split(s).")
 
