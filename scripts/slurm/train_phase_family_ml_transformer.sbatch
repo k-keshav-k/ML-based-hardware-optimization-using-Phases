@@ -97,40 +97,40 @@ import os
 
 from phase_family_ml.families import FAMILY_COUNTERS
 
-p = os.environ["ABLATION_RESULTS_CSV"]
-e = os.environ["EXPERIMENT_MODE"]
-s = os.environ["THRESHOLD_MODE"]
-rows = list(csv.DictReader(open(p, newline="")))
+p = os.environ['ABLATION_RESULTS_CSV']
+e = os.environ['EXPERIMENT_MODE']
+s = os.environ['THRESHOLD_MODE']
+rows = list(csv.DictReader(open(p, newline='')))
 best = {}
 
 for r in rows:
-    fam = r.get("family", "")
+    fam = r.get('family', '')
     if fam not in FAMILY_COUNTERS:
         continue
-    if r.get("experiment", "") != e or r.get("scope", "") != s:
+    if r.get('experiment', '') != e or r.get('scope', '') != s:
         continue
-    if r.get("candidate_type", "") == "unavailable":
+    if r.get('candidate_type', '') == 'unavailable':
         continue
-    cset = (r.get("counter_set", "") or "").strip()
+    cset = (r.get('counter_set', '') or '').strip()
     if not cset:
         continue
     try:
-        score = float(r.get("validation_score", ""))
+        score = float(r.get('validation_score', ''))
     except Exception:
-        score = float("-inf")
+        score = float('-inf')
     if math.isnan(score):
-        score = float("-inf")
-    sel = int(r.get("selected", "0") or 0)
-    prev = best.get(fam, (float("-inf"), -1, ""))
+        score = float('-inf')
+    sel = int(r.get('selected', '0') or 0)
+    prev = best.get(fam, (float('-inf'), -1, ''))
     if (score, sel) >= (prev[0], prev[1]):
         best[fam] = (score, sel, cset)
 
-print(f"ablation_best_family_rows_for_{e}_{s}=" + str(len(best)))
+print(f'ablation_best_family_rows_for_{e}_{s}=' + str(len(best)))
 for fam in sorted(best):
-    print(f"ablation_best[{fam}]=" + best[fam][2] + " score=" + str(best[fam][0]))
+    print(f'ablation_best[{fam}]=' + best[fam][2] + ' score=' + str(best[fam][0]))
 missing = [fam for fam in sorted(FAMILY_COUNTERS) if fam not in best]
 if missing:
-    print("[warn] no counter selected from ablation for families: " + ", ".join(missing))
+    print('[warn] no counter selected from ablation for families: ' + ', '.join(missing))
 PY
 fi
 
