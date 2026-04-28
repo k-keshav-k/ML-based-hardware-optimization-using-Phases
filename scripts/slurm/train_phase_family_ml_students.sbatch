@@ -4,8 +4,7 @@
 #SBATCH --partition=c12m85-a100-1
 #SBATCH --output=./logs/%j_%x.out
 #SBATCH --error=./logs/%j_%x.err
-#SBATCH --time=02:00:00
-#SBATCH --cpus-per-task=8
+#SBATCH --time=08:00:00
 #SBATCH --mem=32G
 #SBATCH --requeue
 
