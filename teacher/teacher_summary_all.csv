@@ -1,6 +1,0 @@
-family,scope,context_mode,counters,rows,validation_score,accuracy,macro_f1,high_usage_recall,phase_change_precision,phase_change_recall,phase_change_f1,experiment
-L1,global,with_context,counter__l1d_loads (ablation_selected),5198,0.5482004511130725,0.8300970873786407,0.7382034632034632,0.6363636363636364,0.8333333333333334,0.1282051282051282,0.2222222222222222,pooled_run_group
-LLC,global,without_context,counter__llc_references (ablation_selected),5198,0.5555204923881469,0.7572815533980582,0.5667398686055954,0.9121621621621622,0.7142857142857143,0.1,0.1754385964912281,pooled_run_group
-branch_control,global,with_context,counter__branch_mispredictions (ablation_selected),5198,0.5924304448630633,0.7669902912621359,0.67277628032345,0.8656716417910447,0.6428571428571429,0.18,0.28124999999999994,pooled_run_group
-core_fp,global,with_context,counter__instructions_retired (ablation_selected),5198,0.5188102383053839,0.7961165048543689,0.6979510451045104,0.6818181818181818,0.5714285714285714,0.09302325581395349,0.16,pooled_run_group
-memory_offcore,global,with_context,counter__memory_write_bandwidth (ablation_selected),3342,0.565985967202415,0.7378640776699029,0.5803656881985851,0.8970588235294118,0.5,0.14814814814814814,0.22857142857142856,pooled_run_group
