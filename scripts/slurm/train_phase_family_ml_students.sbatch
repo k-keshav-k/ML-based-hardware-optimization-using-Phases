@@ -5,7 +5,7 @@
 #SBATCH --output=./logs/%j_%x.out
 #SBATCH --error=./logs/%j_%x.err
 #SBATCH --time=08:00:00
-#SBATCH --mem=32G
+#SBATCH --gres=gpu:1
 #SBATCH --requeue
 
 # Student-only distillation job. Submit after the teacher job succeeds, e.g.:
@@ -13,7 +13,7 @@
 
 mkdir -p logs
 
-singularity exec --bind /scratch \
+singularity exec --bind /scratch --nv \
   --overlay "${OVERLAY_PATH:-/scratch/kk6081/overlay-25GB-500K.ext3:rw}" \
   "${SIF_PATH:-/scratch/kk6081/ubuntu-20.04.3.sif}" \
   /bin/bash <<'BASH'

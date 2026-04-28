@@ -225,6 +225,7 @@ def _teacher_checkpoint_path(teacher_predictions_path: Path, family: str) -> Pat
 def _predict_teacher_checkpoint(checkpoint_path: Path, x: np.ndarray, batch_size: int = 1024) -> np.ndarray:
     torch, _ = require_torch()
     checkpoint = torch.load(checkpoint_path, map_location="cpu")
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model = build_family_transformer(
         input_dim=int(checkpoint["input_dim"]),
         horizon=int(checkpoint["horizon"]),
@@ -232,11 +233,12 @@ def _predict_teacher_checkpoint(checkpoint_path: Path, x: np.ndarray, batch_size
         config=dict(checkpoint["config"]),
     )
     model.load_state_dict(checkpoint["state_dict"])
+    model.to(device)
     model.eval()
     parts: list[np.ndarray] = []
     with torch.no_grad():
         for start in range(0, x.shape[0], batch_size):
-            xb = torch.tensor(x[start : start + batch_size], dtype=torch.float32)
+            xb = torch.tensor(x[start : start + batch_size], dtype=torch.float32, device=device)
             parts.append(model(xb).argmax(dim=2).cpu().numpy().astype(int))
     return np.concatenate(parts, axis=0) if parts else np.empty((0, int(checkpoint["horizon"])), dtype=int)
 
