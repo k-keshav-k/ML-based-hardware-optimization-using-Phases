@@ -1,4 +1,4 @@
-"""Counter sequence construction with train-split tertile states.
+"""Counter sequence construction with train-split clustered phase states.
 
 This stage converts raw counter intervals into per-counter value streams plus
 discrete states used for ablation scoring.
@@ -15,7 +15,7 @@ import numpy as np
 
 from hpc_phase_analysis.io_utils import ensure_dir, load_csv_rows, safe_float, write_csv_rows, write_json
 
-from .families import FAMILY_COUNTERS, derive_feature_values, derived_columns_for_family, family_counter_availability
+from .families import FAMILY_COUNTERS, FORBIDDEN_PARTS, derive_feature_values, derived_columns_for_family, family_counter_availability
 from .splits import ExperimentSplit, build_experiment_splits
 
 SelectedCounterMap = dict[tuple[str, str], dict[str, list[str]]]
@@ -373,12 +373,183 @@ def counter_value_series(rows: list[dict[str, str]], counter: str) -> np.ndarray
     return values
 
 
+def safe_counter_columns(rows: list[dict[str, str]]) -> list[str]:
+    """Return safe raw counter columns used by the offline phase teacher."""
+
+    columns = sorted({key for row in rows for key in row.keys() if key.startswith("counter__")})
+    return [column for column in columns if not any(part in column.lower() for part in FORBIDDEN_PARTS)]
+
+
+def _safe_counter_matrix(rows: list[dict[str, str]], counters: list[str]) -> np.ndarray:
+    matrix = np.full((len(rows), len(counters)), np.nan, dtype=float)
+    for row_index, row in enumerate(rows):
+        for col_index, counter in enumerate(counters):
+            value = safe_float(row.get(counter, ""))
+            if np.isfinite(value):
+                matrix[row_index, col_index] = math.log1p(value) if value >= 0.0 else value
+    return matrix
+
+
+def _fill_and_scale(matrix: np.ndarray, train_mask: np.ndarray) -> tuple[np.ndarray, dict[str, list[float]]]:
+    filled = matrix.copy()
+    if filled.size == 0:
+        return filled, {"median": [], "mean": [], "std": []}
+    medians: list[float] = []
+    means: list[float] = []
+    stds: list[float] = []
+    for col in range(filled.shape[1]):
+        train_values = filled[train_mask, col]
+        clean = train_values[np.isfinite(train_values)]
+        median = float(np.median(clean)) if clean.size else 0.0
+        missing = ~np.isfinite(filled[:, col])
+        filled[missing, col] = median
+        clean_filled = filled[train_mask, col]
+        mean = float(np.mean(clean_filled)) if clean_filled.size else 0.0
+        std = float(np.std(clean_filled)) if clean_filled.size else 1.0
+        if not np.isfinite(std) or std == 0.0:
+            std = 1.0
+        filled[:, col] = (filled[:, col] - mean) / std
+        medians.append(median)
+        means.append(mean)
+        stds.append(std)
+    return filled, {"median": medians, "mean": means, "std": stds}
+
+
+def _kmeans(train_x: np.ndarray, n_clusters: int, seed: int) -> tuple[np.ndarray, np.ndarray]:
+    if train_x.shape[0] == 0:
+        return np.empty((0, train_x.shape[1]), dtype=float), np.empty(0, dtype=int)
+    unique = np.unique(train_x, axis=0)
+    k = min(max(1, n_clusters), unique.shape[0])
+    rng = np.random.default_rng(seed)
+    init_idx = rng.choice(unique.shape[0], size=k, replace=False)
+    centroids = unique[init_idx].astype(float, copy=True)
+    labels = np.zeros(train_x.shape[0], dtype=int)
+    for _ in range(100):
+        distances = np.sum((train_x[:, None, :] - centroids[None, :, :]) ** 2, axis=2)
+        new_labels = np.argmin(distances, axis=1)
+        new_centroids = centroids.copy()
+        for cluster in range(k):
+            members = train_x[new_labels == cluster]
+            if members.shape[0] > 0:
+                new_centroids[cluster] = np.mean(members, axis=0)
+        if np.array_equal(new_labels, labels) and np.allclose(new_centroids, centroids):
+            labels = new_labels
+            centroids = new_centroids
+            break
+        labels = new_labels
+        centroids = new_centroids
+    return centroids, labels
+
+
+def _nearest_centroid(x: np.ndarray, centroids: np.ndarray) -> np.ndarray:
+    if centroids.shape[0] == 0:
+        return np.full(x.shape[0], -1, dtype=int)
+    distances = np.sum((x[:, None, :] - centroids[None, :, :]) ** 2, axis=2)
+    return np.argmin(distances, axis=1).astype(int)
+
+
+def _pressure_feature_indices(counters: list[str]) -> list[int]:
+    output: list[int] = []
+    for index, counter in enumerate(counters):
+        name = counter.lower()
+        if "llc_misses" in name or ("memory" in name and "bandwidth" in name) or "branch_mispredictions" in name or "stall" in name:
+            output.append(index)
+    return output
+
+
+def _cluster_one_scope(
+    rows: list[dict[str, str]],
+    counters: list[str],
+    split_by_run: dict[str, str],
+    row_mask: np.ndarray,
+    n_clusters: int,
+    seed: int,
+) -> tuple[np.ndarray, dict[str, object]]:
+    matrix = _safe_counter_matrix(rows, counters)
+    train_mask = row_mask & np.asarray([split_by_run.get(str(row.get("run_id", "")), "train") == "train" for row in rows], dtype=bool)
+    if not np.any(train_mask):
+        train_mask = row_mask.copy()
+    if not counters or not np.any(row_mask):
+        return np.full(len(rows), -1, dtype=int), {"rows": int(np.sum(row_mask)), "train_rows": int(np.sum(train_mask)), "clusters": 0}
+    scaled, scaler = _fill_and_scale(matrix, train_mask)
+    centroids, _ = _kmeans(scaled[train_mask], n_clusters, seed)
+    raw_labels = _nearest_centroid(scaled, centroids)
+    raw_labels[~row_mask] = -1
+
+    pressure_indices = _pressure_feature_indices(counters)
+    if pressure_indices:
+        pressure = np.sum(scaled[:, pressure_indices], axis=1)
+    else:
+        pressure = np.linalg.norm(scaled, axis=1)
+    cluster_pressure: dict[int, float] = {}
+    cluster_sizes: dict[int, int] = {}
+    for cluster in range(centroids.shape[0]):
+        members = train_mask & (raw_labels == cluster)
+        cluster_sizes[cluster] = int(np.sum(raw_labels[row_mask] == cluster))
+        cluster_pressure[cluster] = float(np.mean(pressure[members])) if np.any(members) else math.inf
+    ordered_clusters = sorted(range(centroids.shape[0]), key=lambda item: cluster_pressure.get(item, math.inf))
+    remap = {cluster: rank for rank, cluster in enumerate(ordered_clusters)}
+    states = np.full(len(rows), -1, dtype=int)
+    for cluster, state in remap.items():
+        states[row_mask & (raw_labels == cluster)] = state
+
+    train_distances = np.sqrt(np.sum((scaled[train_mask] - centroids[raw_labels[train_mask]]) ** 2, axis=1))
+    centroid_distances = [
+        float(np.linalg.norm(centroids[i] - centroids[j]))
+        for i in range(centroids.shape[0])
+        for j in range(i + 1, centroids.shape[0])
+    ]
+    summary = {
+        "rows": int(np.sum(row_mask)),
+        "train_rows": int(np.sum(train_mask)),
+        "clusters": int(centroids.shape[0]),
+        "counter_count": len(counters),
+        "pressure_counters": ",".join(counters[index] for index in pressure_indices),
+        "state_order": ";".join(f"{remap[cluster]}:{cluster_pressure[cluster]:.6g}" for cluster in ordered_clusters),
+        "cluster_sizes": ";".join(f"{remap[cluster]}:{cluster_sizes[cluster]}" for cluster in ordered_clusters),
+        "mean_train_distance": float(np.mean(train_distances)) if train_distances.size else 0.0,
+        "min_centroid_distance": min(centroid_distances) if centroid_distances else 0.0,
+        "centroids": centroids.tolist(),
+        "scaler": scaler,
+    }
+    return states, summary
+
+
+def clustered_phase_states(
+    rows: list[dict[str, str]],
+    split_by_run: dict[str, str],
+    scope: str,
+    n_clusters: int,
+    seed: int,
+) -> tuple[np.ndarray, list[dict[str, object]]]:
+    """Fit train-only k-means phase labels and assign every interval."""
+
+    counters = safe_counter_columns(rows)
+    all_mask = np.ones(len(rows), dtype=bool)
+    if scope == "global":
+        states, summary = _cluster_one_scope(rows, counters, split_by_run, all_mask, n_clusters, seed)
+        summary.update({"scope": scope, "workload": ""})
+        return states, [summary]
+    if scope == "per_workload":
+        output = np.full(len(rows), -1, dtype=int)
+        summaries: list[dict[str, object]] = []
+        for workload in sorted({str(row.get("workload", "")) for row in rows}):
+            mask = np.asarray([str(row.get("workload", "")) == workload for row in rows], dtype=bool)
+            states, summary = _cluster_one_scope(rows, counters, split_by_run, mask, n_clusters, seed)
+            output[mask] = states[mask]
+            summary.update({"scope": scope, "workload": workload})
+            summaries.append(summary)
+        return output, summaries
+    raise ValueError(f"Unsupported scope: {scope}")
+
+
 def build_raw_counter_sequence_rows(
     rows: list[dict[str, str]],
     split: ExperimentSplit,
     scope: str,
     horizon: int,
     output_dir: Path,
+    phase_states: np.ndarray,
 ) -> int:
     """Write per-counter value sequence datasets for LM-style counter prediction."""
 
@@ -388,14 +559,13 @@ def build_raw_counter_sequence_rows(
     for family, counters in FAMILY_COUNTERS.items():
         for counter in counters:
             values = counter_value_series(rows, counter)
-            thresholds = thresholds_for_family(values, rows, split.split_by_run, scope)
-            states = states_for_scope(values, rows, scope, thresholds)
-            label_rows = build_counter_state_rows(rows, states, split.split_by_run, horizon)
+            label_rows = build_counter_state_rows(rows, phase_states, split.split_by_run, horizon)
             future_values = _future_values_by_row(rows, values, horizon)
             for item in label_rows:
                 row_index = int(item.get("row_index", -1))
                 item["counter_name"] = counter
                 item["family"] = family
+                item["phase_label_source"] = "train_split_kmeans_full_safe_counters"
                 current_value = values[row_index] if 0 <= row_index < values.shape[0] else math.nan
                 item["counter_value"] = "" if not np.isfinite(current_value) else current_value
                 for step in range(1, horizon + 1):
@@ -412,6 +582,7 @@ def build_counter_sequences_for_split(
     output_dir: Path,
     horizon: int,
     threshold_mode: str,
+    seed: int,
     selected_counters_by_scope: dict[str, dict[str, list[str]]] | None = None,
     write_family_sequences: bool = True,
 ) -> dict[str, object]:
@@ -422,14 +593,18 @@ def build_counter_sequences_for_split(
     scopes = ["global", "per_workload"] if threshold_mode == "both" else [threshold_mode]
     summary_rows: list[dict[str, object]] = []
     counter_dataset_rows: list[dict[str, object]] = []
+    cluster_summary_rows: list[dict[str, object]] = []
     for scope in scopes:
-        counter_files_written = build_raw_counter_sequence_rows(rows, split, scope, horizon, output_dir)
+        phase_states, cluster_summaries = clustered_phase_states(rows, split.split_by_run, scope, 3, seed)
+        cluster_summary_rows.extend(cluster_summaries)
+        counter_files_written = build_raw_counter_sequence_rows(rows, split, scope, horizon, output_dir, phase_states)
         counter_dataset_rows.append(
             {
                 "experiment": split.name,
                 "mode": split.mode,
                 "scope": scope,
                 "counter_files_written": counter_files_written,
+                "phase_label_source": "train_split_kmeans_full_safe_counters",
             }
         )
         scope_dir = _scope_output_dir(output_dir, scope)
@@ -474,6 +649,7 @@ def build_counter_sequences_for_split(
                     "available": int(bool(availability.get(family, []))),
                     "selected_counters": ",".join(selected_counter_set),
                     "sequence_source": source,
+                    "phase_label_source": "train_split_kmeans_full_safe_counters",
                     "counter_sequence_files_written": counter_files_written,
                     "global_low_threshold": "" if not np.isfinite(low) else low,
                     "global_high_threshold": "" if not np.isfinite(high) else high,
@@ -481,16 +657,24 @@ def build_counter_sequences_for_split(
             )
     write_csv_rows(output_dir / "counter_sequence_summary.csv", summary_rows)
     write_csv_rows(output_dir / "counter_sequence_file_summary.csv", counter_dataset_rows)
+    write_csv_rows(
+        output_dir / "phase_cluster_summary.csv",
+        [{key: value for key, value in row.items() if key not in {"centroids", "scaler"}} for row in cluster_summary_rows],
+    )
     write_json(
         output_dir / "counter_sequence_manifest.json",
         {
             "experiment": split.name,
             "mode": split.mode,
             "threshold_mode": threshold_mode,
+            "phase_label_method": "train_split_kmeans_full_safe_counters",
+            "phase_clusters": 3,
             "horizon": horizon,
             "rows": len(rows),
             "family_sequences_written": write_family_sequences,
             "family_availability": availability,
+            "safe_counter_columns": safe_counter_columns(rows),
+            "phase_cluster_models": cluster_summary_rows,
             "selected_counters_by_scope": selected_counters_by_scope or {},
         },
     )
@@ -558,6 +742,7 @@ def build_counter_sequences(
                 split_output,
                 horizon,
                 threshold_mode,
+                seed,
                 selected_counters_by_scope=selected_counters_by_scope,
                 write_family_sequences=should_write_family_sequences,
             )

@@ -1,0 +1,543 @@
+\documentclass[10pt,twocolumn]{article}
+
+\usepackage[margin=0.75in]{geometry}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{microtype}
+\usepackage{times}
+\usepackage{amsmath}
+\usepackage{booktabs}
+\usepackage{graphicx}
+\usepackage{algorithm}
+\usepackage{algorithmic}
+\usepackage{placeins}
+\usepackage{flushend}
+\usepackage{xcolor}
+\usepackage{url}
+\usepackage[hidelinks]{hyperref}
+\pdfsuppresswarningpagegroup=1
+\setcounter{topnumber}{5}
+\setcounter{bottomnumber}{5}
+\setcounter{totalnumber}{10}
+\renewcommand{\topfraction}{0.95}
+\renewcommand{\bottomfraction}{0.95}
+\renewcommand{\textfraction}{0.05}
+\renewcommand{\floatpagefraction}{0.8}
+\renewcommand{\dbltopfraction}{0.95}
+\renewcommand{\dblfloatpagefraction}{0.8}
+
+\title{A Lightweight Hardware-Counter Phase Detector for Multicore Workloads}
+\author{Keshav Krishna}
+\date{}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+Efficiency-oriented processors increasingly depend on workload-aware hardware adaptation: static choices for frequency, cache policy, prefetching, and scheduling leave performance and energy opportunities unused when software behavior changes over time.
+Prior work has shown that programs exhibit recurring phases and that phase information can guide simulation, resource management, and forecasting.
+However, many established phase-detection techniques are awkward for direct online hardware use: offline SimPoint-style clustering requires profile construction, runtime clustering can be noisy and threshold-sensitive, and neural phase-aware predictors add storage and inference complexity.
+This paper studies a more hardware-practical path for multicore workloads: train-only offline clustering over the full safe hardware-counter set to define phase labels, counter-family ablations to select one representative counter per family, and shallow decision trees that use the last 20 selected-counter intervals to predict the next 5 phase labels.
+The goal is not to maximize model sophistication, but to distill a richer offline phase teacher into a detector that is implementable with a small set of monitored counters, bounded history storage, and threshold-comparator logic.
+On PARSEC-derived multicore traces collected under three workload-construction regimes, the reduced five-counter detector achieves mean top-1 accuracies of 75.0\%, 83.5\%, and 65.0\% for Sets 1--3, respectively, while maintaining transition-case accuracies of 28.1\%, 47.4\%, and 32.1\%.
+Against simple online baselines, the detector improves mean accuracy over last-state persistence by 2.6, 5.6, and 1.6 percentage points, respectively, while preserving a compact depth-6 implementation.
+The resulting five-tree horizon predictors require an estimated 1.26--1.77 KB of model storage per set-level detector, showing that offline clustering can be converted into a low-latency online phase forecaster rather than deployed directly in hardware.
+\end{abstract}
+
+\section{Introduction}
+
+Modern processors are built to be configurable.
+Voltage/frequency settings, cache and prefetch controls, thread placement, and power-management policies expose many ways to trade performance, energy, latency, and thermal headroom.
+The hard part is deciding when to change those controls.
+A static configuration chosen at boot time, process launch, or benchmark start cannot track the fact that a multicore workload may alternate between compute-heavy, memory-bound, branch-sensitive, and synchronization-heavy intervals.
+
+Program phase behavior provides the missing abstraction.
+If intervals with similar execution behavior can be recognized, hardware or the operating system can avoid reacting to every raw counter fluctuation and instead make decisions over a compact phase state.
+Offline phase analysis has been effective for simulation-point selection using Basic Block Vectors (BBVs), SimPoint, and clustering \cite{sherwood2001bbda,sherwood2002simpoint,hamerly2005simpoint3}.
+Runtime phase trackers showed that compact fingerprints and Markov predictors can expose phase transitions online \cite{sherwood2003phase,chang2013sampling}.
+Parallel phase studies extended the idea to per-thread and shared-memory behavior, where phase identity interacts with scaling and shared-resource interference \cite{perelman2006parallel,ding2006programphase}.
+More recent work uses hardware performance counters (HPCs), clustering, regression, and neural models to connect phases with power, cache demand, scheduling, and forecasting \cite{kim2017p4,ziedan2016runtime,nomani2015predicting,lozano2022phase,carpentieri2025frequency}.
+
+These systems also expose a tension.
+The most accurate phase representation is not necessarily the best representation for hardware control.
+BBV-based approaches are powerful but usually rely on offline profiling or code signatures.
+Online clustering and GMM variants must maintain centroids or distributions and can create spurious short phases unless filtered.
+Neural and LSTM-based predictors improve sequence modeling, but inference latency, parameter storage, quantization, and integration into low-level control loops are nontrivial.
+Finally, many PMU-based methods begin with broad event sets, even though real processors expose a limited number of programmable counters at once and many events are correlated.
+
+This paper therefore asks a deliberately constrained question: how far can we get with a small set of counters and a decision tree?
+The proposed flow first reduces redundancy using correlation analysis, excludes timing-dependent features that would leak DVFS decisions back into the detector, runs counter-family ablations to select representative events, defines three offline phase labels by clustering the full safe counter vector, and then trains a compact bank of decision trees over short selected-counter histories.
+The online detector emits a five-step phase forecast over low-, moderate-, and high-pressure states, so a controller can reevaluate every interval or amortize control decisions across several future intervals.
+
+This paper makes the following contributions:
+\begin{itemize}
+  \item A correlation-driven counter-reduction workflow that identifies redundant PMU indicators before model training.
+  \item A counter-family ablation methodology that evaluates cache, memory/off-core, branch-control, and instruction/floating-point families separately.
+  \item A dataset collection and merging pipeline for three multicore workload regimes: single process with multiple threads, multiple single-threaded processes, and hybrid multiprocess/multithread workloads.
+  \item A phase-detector distillation flow in which train-only offline k-means over the full safe counter set defines three interpretable phase labels, while the deployed detector uses only one counter per family.
+  \item A long-horizon online detector that uses the last 20 intervals to predict the next 5 phases with shallow decision trees.
+  \item A hardware-overhead analysis showing how the resulting tree bank maps to comparators, small tables, and bounded per-core history state, plus an evaluation against persistence and majority baselines.
+\end{itemize}
+
+\section{Related Work}
+
+The strongest early evidence for phase behavior came from code-signature methods for simulation and architectural characterization.
+Basic Block Distribution Analysis and SimPoint showed that normalized basic-block vectors can expose recurring behavior and select representative intervals for simulation \cite{sherwood2001bbda,sherwood2002simpoint}.
+Later SimPoint work improved scalability and flexibility, while phase-classification studies compared alternative code structures and detection metrics such as basic blocks, procedures, opcodes, loop branches, instruction working sets, and conditional branches \cite{hamerly2005simpoint3,lau2005motivation,dhodapkar2003comparing}.
+This line of work is essential because it made phase behavior measurable, but its usual data path is profiling-oriented and code-centric rather than a direct implementation target for hardware control loops.
+
+Runtime phase work moved the idea closer to online adaptation.
+Working-set signatures were used to manage multiconfiguration hardware and avoid repeated retuning \cite{dhodapkar2002managing}, while runtime phase tracking used compact instruction fingerprints and predictors to classify and forecast large-scale behavior \cite{sherwood2003phase}.
+Sampling-based approaches extended this direction to multithreaded execution and showed the value of classifying intervals without observing every instruction \cite{chang2013sampling}.
+These systems motivate our use of history and hysteresis, but they still depend on code signatures or tuning structures that differ from the threshold-comparator datapath considered here.
+
+Parallel and multicore phase behavior adds another layer of difficulty.
+Per-thread representations are needed when the same application changes behavior across threads or thread counts \cite{perelman2006parallel}, and broader phase-exploitation work argues that phases can appear at multiple granularities in memory reference behavior, I/O activity, and resource occupancy \cite{ding2006programphase}.
+Multilevel phase analysis further shows that phases can be nested and tied to different hardware resources \cite{zhang2014multilevel}.
+The PARSEC suite is a useful substrate for this question because it was designed to stress shared-memory multicore behavior, locality, synchronization, and off-chip traffic \cite{bienia2008parsec}.
+These observations are why this paper separates single-process multithreaded, multiprocess single-threaded, and hybrid workloads instead of assuming that one aggregate process signal is sufficient.
+
+Hardware performance counters provide a different interface to phase behavior.
+Counter architectures and vendor manuals describe both the opportunity and the ambiguity of PMU measurements: counters are cheap relative to instrumentation, but event meanings, availability, multiplexing, and overlap effects require care \cite{eyerman2006cpi,intel2024optimization,intel2024sdm,linux2024perf,perfwiki2024}.
+Nomani and Szefer use counters for phase prediction in a security-aware scheduling context \cite{nomani2015predicting}; Ziedan et al. use PMU-derived cache-access signatures for runtime L2 cache-demand phases \cite{ziedan2016runtime}; Kim et al. use phase information and neural models for cross-platform power/performance prediction \cite{kim2017p4}; and Lozano and Gerstlauer combine clustering, classification, prediction, and LSTMs for phase-aware multicore workload forecasting \cite{lozano2022phase}.
+These works support the use of counters and learning, but they also expose the cost of broad counter sets, offline tuning, centroid maintenance, or neural inference in a low-level controller.
+
+The control targets for phase detection are well established.
+Adaptive cache ways, reconfigurable memory hierarchies, and adaptive issue queues show that hardware structures can save energy or improve performance when their active resources track workload demand \cite{albonesi1999selective,balasubramonian2000memory,buyuktosunoglu2000drowsy}.
+Power-monitoring and scheduling systems use counters or workload characterization to guide thermal balancing, virtual-machine management, heterogeneous-core scheduling, and frequency decisions \cite{isci2003runtime,merkel2006balancing,dhiman2009dynamic,petrucci2012lucky,carpentieri2025frequency}.
+Low-level implementations also need deterministic state updates and compact policy tables; techniques such as read-copy update illustrate the broader systems concern of updating shared control state without long stalls \cite{mckenney1995rcu}.
+Our detector is not itself a cache, DVFS, or scheduler policy, but is intended to supply the stable state signal those mechanisms need.
+
+The modeling tools used by prior phase systems span classic clustering, probabilistic models, decision trees, and neural sequence models.
+K-means and related clustering methods are a natural fit for SimPoint-style interval grouping \cite{macqueen1967methods,lloyd1982least,jain1999data}; EM underlies Gaussian-mixture approaches \cite{dempster1977maximum}; CART and C4.5 motivate the decision-tree representation used here \cite{breiman1984cart,quinlan1993c45}; and back-propagation and LSTM models motivate neural baselines for sequence prediction \cite{rumelhart1986learning,hochreiter1997lstm}.
+General architecture texts frame the hardware tradeoff behind this choice: predictor accuracy matters, but storage, latency, counters, and control-loop stability matter too \cite{hennessy2019computer}.
+
+This work is closest in spirit to online phase tracking and PMU-driven phase prediction, but differs in two ways.
+First, it explicitly minimizes the hardware-visible counter set before classifier training using correlation analysis and family ablations.
+Second, it replaces online clustering or neural inference with a compact decision-tree classifier whose internal nodes can be implemented as threshold comparators and whose output can feed a small phase-to-action table.
+
+\section{Methodology}
+
+\subsection{Overview}
+
+Figure~\ref{fig:pipeline} summarizes the pipeline.
+Raw PMU measurements are first analyzed for redundancy.
+Timing-dependent counters and derived features are excluded from the phase-state modeling path.
+The remaining counters are grouped into semantic families, ablated to select representative signals, collected again in set-specific multicore experiments, transformed into three-state sequences, and used to train a decision tree over a short history window.
+
+\begin{figure}[t]
+  \centering
+  \fbox{\parbox{0.94\linewidth}{\centering
+  Raw counters $\rightarrow$ correlation analysis $\rightarrow$ reduced counter set $\rightarrow$ counter-family ablation $\rightarrow$ dataset collection $\rightarrow$ phase/state labels $\rightarrow$ decision tree $\rightarrow$ hardware phase detector}}
+  \caption{Phase-detector pipeline. Each arrow is a data-reduction or representation step intended to make the final detector easier to map into hardware.}
+  \label{fig:pipeline}
+\end{figure}
+
+\subsection{Initial Counter Set}
+
+The initial counter set is derived from Linux \texttt{perf} / PMU event availability and the repository's event-aliasing logic.
+The correlation artifact reports ten confident core PMU counters: instructions retired, cycles, branch instructions, branch mispredictions, L1 data loads, L1 data stores, LLC references, LLC misses, off-core demand data reads, and resource stalls.
+The same artifact also records system-wide uncore bandwidth columns when host policy permits them: memory read bandwidth, memory write bandwidth, and total memory bandwidth.
+On the Xeon E5-2680 v2 system used for the correlation artifact, these map to preferred Intel events such as \texttt{inst\_retired.any}, \texttt{cpu\_clk\_unhalted.thread}, \texttt{br\_inst\_retired.all\_branches}, \texttt{br\_misp\_retired.all\_branches}, \texttt{mem\_uops\_retired.all\_loads}, \texttt{mem\_uops\_retired.all\_stores}, \texttt{longest\_lat\_cache.reference}, \texttt{longest\_lat\_cache.miss}, \texttt{offcore\_requests.demand\_data\_rd}, and \texttt{resource\_stalls.any}.
+
+\subsection{Excluding Cycle/Timing-Dependent Counters}
+
+The detector should not learn a phase state that changes simply because the controller changed frequency.
+Accordingly, the modeling path excludes counters or features whose names indicate timing-derived behavior, including cycle, IPC, CPI, elapsed time, stalls, per-ms rates, interval duration, and runtime.
+This policy follows the implementation in \texttt{phase\_family\_ml/families.py}.
+The correlation study may still report timing-derived indicators, because they are useful for understanding redundancy and workload behavior, but the hardware phase detector should avoid using them as direct inputs.
+
+\subsection{Correlation-Guided Counter Reduction}
+
+The correlation analysis in \texttt{results\_indep\_study/} uses raw and normalized views.
+The normalized Spearman view is the preferred basis for redundancy decisions because raw counts can correlate merely because total activity, interval length, or thread count increased.
+The current recommendation table identifies two high-correlation groups: cycles/ms with instructions retired/ms, and LLC references/KI with off-core demand reads/KI, both with maximum $|\rho|=0.976$.
+For the final detector, this step is used to avoid monitoring counters that convey near-duplicate signal under the normalized view.
+
+\subsection{Counter-Family Ablation}
+
+Counters are grouped by semantic family: L1, L2, LLC, memory/off-core, branch-control, and core instruction/floating-point behavior.
+The ablation procedure evaluates singleton counters within each family and an exhaustive one-per-family combination when coverage permits.
+In the current large set artifacts, L2 is unavailable because no L2 counter sequence rows are present.
+The selected one-per-family sets differ across workload regimes, which is itself a useful warning: counter reduction should be evaluated under the intended deployment mix rather than assumed universal.
+
+\subsection{Dataset Collection and Merging}
+
+The collection pipeline records PARSEC interval traces, aligns raw \texttt{perf} output with workload metadata, merges raw run folders into interval datasets, and preserves metadata such as workload, thread count, run identifier, core identifier, and phase label.
+Table~\ref{tab:datasets} summarizes the current large artifacts.
+
+\begin{table*}[t]
+  \centering
+  \caption{Current dataset artifacts. Counts are sourced from the local merge summaries.}
+  \label{tab:datasets}
+  \begin{tabular}{llrrr}
+    \toprule
+    Set & Regime & Runs & Rows & Uncore rows \\
+    \midrule
+    Set 1 & single-process multithreaded & 1050 & 685787 & 466743 \\
+    Set 2 & multiprocess single-threaded & 240 & 25627 & 17720 \\
+    Set 3 & hybrid multiprocess/multithread & 240 & 90876 & 67980 \\
+    \bottomrule
+  \end{tabular}
+\end{table*}
+
+\subsection{Phase/State Definition}
+
+The current pipeline maps each interval into three discrete phase states:
+\begin{equation}
+  s_t \in \{0, 1, 2\} = \{\text{low}, \text{moderate}, \text{high}\}.
+\end{equation}
+The state definition is intentionally coarse.
+For dynamic reconfiguration, the detector only needs to distinguish whether resource pressure is low enough to reduce provisioning, high enough to increase provisioning, or in the middle where the current policy may be retained.
+We use offline clustering over the full safe counter set only to define phase labels.
+The deployed detector does not perform clustering; instead, it uses a shallow decision tree trained to approximate those labels from a reduced counter set, making the phase detector suitable for low-latency hardware implementation.
+The sequence builder fits the scaler and k-means centroids only on training intervals, assigns validation and test intervals by nearest centroid, and orders the three clusters by a resource-pressure score based on LLC misses, memory bandwidth, branch mispredictions, and stalls when available.
+After ablation selects one representative raw counter per family, the selected-counter streams retain the same clustered phase labels.
+This ordering step is important for interpretability: k-means itself produces anonymous clusters, while the pressure sort turns them into a low/moderate/high resource-pressure axis that can be checked directly in the generated cluster summaries.
+
+\subsection{Decision-Tree Training over Counter Sequences}
+
+The phase-detector command in the repository trains a bank of five shallow decision trees.
+Each tree consumes a flattened history of the last 20 selected-counter vectors and predicts one future clustered phase label, from $t{+}1$ through $t{+}5$.
+The intended hardware detector uses the same basic structure: normalize or quantize the selected counters, maintain a bounded history buffer, traverse a small tree, and emit a future phase state.
+Because the predictor is multi-step rather than single-step, hardware control logic can invoke the detector every interval or less frequently and use the predicted horizon between invocations.
+
+\begin{algorithm}[t]
+  \caption{Multi-step decision-tree phase detector}
+  \label{alg:detector}
+  \begin{algorithmic}[1]
+    \REQUIRE Selected per-core counter vector $c_t$, history window $W{=}20$, trained tree bank $\{T_1,\ldots,T_5\}$
+    \ENSURE Forecast $\hat{s}_{t+1:t+5} \in \{\text{low}, \text{moderate}, \text{high}\}^5$
+    \STATE Normalize or quantize each selected counter in $c_t$
+    \STATE Append the quantized vector to the per-core history buffer
+    \STATE Construct window features $x_t$ from the most recent $W$ intervals
+    \FOR{$h \in \{1,\ldots,5\}$}
+      \STATE Traverse $T_h$ by comparing feature values against node thresholds
+      \STATE Let $\hat{s}_{t+h}$ be the phase state stored in the reached leaf
+    \ENDFOR
+    \STATE Publish the horizon forecast or derive a control action from it
+  \end{algorithmic}
+\end{algorithm}
+
+\subsection{Stability Filtering / Hysteresis}
+
+A phase detector used for hardware control must avoid oscillation.
+The proposed detector therefore separates label prediction from action publication.
+The current final-dataset artifacts report stable-case accuracy and transition-case accuracy directly from the raw five-step predictions; a downstream controller can still apply hysteresis or action smoothing on top of those predictions.
+This mirrors the role of confidence tables and transition phases in prior online phase trackers, but keeps the detector state minimal: a bounded history buffer, a tree bank, and optional action-side hysteresis.
+
+\subsection{Output Actions for Hardware Reconfiguration}
+
+The detector does not prescribe one fixed hardware action.
+Instead, it provides a compact state that can index a phase-to-action table for DVFS, cache partitioning or way control, prefetch aggressiveness, scheduling, or power gating.
+For example, a high memory/off-core state may request a different prefetch or cache policy, while a low instruction/floating-point state may permit lower frequency.
+These action mappings must be evaluated separately from detector accuracy.
+The evaluation therefore distinguishes measured detector overhead from projected system-level energy or performance savings.
+
+\section{Experiments}
+
+\subsection{Research Questions}
+
+\begin{itemize}
+  \item RQ1: Which counters are redundant and can be removed without losing phase signal?
+  \item RQ2: Which counter family is most predictive of phase behavior under each workload regime?
+  \item RQ3: Do the clustered three-state labels correspond to interpretable low-, moderate-, and high-pressure workload states?
+  \item RQ4: How well does the reduced-counter long-horizon detector reproduce those labels, and how does it compare with simple online baselines?
+  \item RQ5: What are the detector's latency, storage, and hardware overhead?
+\end{itemize}
+
+\subsection{Experimental Setup}
+
+The correlation artifact reports an Intel Xeon E5-2680 v2 host with 20 logical CPUs, two sockets, 10 cores per socket, Linux \texttt{perf} version 5.14.0, PARSEC availability, and 10 ms target sampling intervals.
+The benchmark suite is PARSEC \cite{bienia2008parsec}.
+The final collection artifacts under \texttt{/scratch/kk6081/finals\_dataset/set1}, \texttt{/scratch/kk6081/finals\_dataset/set2}, and \texttt{/scratch/kk6081/finals\_dataset/set3} include PARSEC workloads blackscholes, bodytrack, canneal, fluidanimate, freqmine, swaptions, and streamcluster across \texttt{simsmall}, \texttt{simmedium}, and \texttt{simlarge} inputs.
+The phase-family configuration uses history length 20, prediction horizon 5, random seed 17, a 70/15/15 train/validation/test split, and \texttt{config\_group\_holdout} grouping so that repetitions of the same collection configuration do not cross split boundaries.
+Offline k-means is fit only on training rows, and validation/test rows are labeled by nearest-centroid assignment from the trained clustering model.
+
+\subsection{Experiment Sets}
+
+Set 1 studies a single process with multiple threads.
+Set 2 studies multiple single-threaded processes running concurrently.
+Set 3 studies a hybrid construction with multiple processes and multiple threads.
+These sets are intended to separate intra-application parallelism from multiprogram interference and from the mixed case that combines both.
+
+\subsection{Baselines}
+
+The generated artifacts support three direct baselines for every set.
+The \emph{last-state} baseline predicts that the future phase equals the current phase.
+The \emph{majority} baseline predicts the globally most common future phase from the training rows.
+The \emph{state-conditioned majority} baseline predicts the most common future phase conditioned on the current state.
+These baselines are intentionally simple: they separate persistence effects from genuine forecasting value without introducing a second expensive teacher model into the online comparison.
+
+\subsection{Metrics}
+
+The main classifier metrics are accuracy (equivalently top-1 accuracy), macro F1, recall of the high-pressure state, stable-case accuracy, and transition-case accuracy.
+Stable-case accuracy measures rows where the future label equals the current label; transition-case accuracy measures rows where the future label changes.
+This split matters for hardware use: persistence-heavy tasks can look strong under raw accuracy even when the detector fails to anticipate changes.
+We also report gains over the three online baselines, history length, prediction horizon, feature count, tree depth, node counts, and estimated storage.
+Energy/performance improvement is not reported because no DVFS, cache, or scheduling action policy is applied in these artifacts.
+
+\section{Results}
+
+\subsection{Correlation Structure and Counter Redundancy}
+
+The normalized correlation artifact contains 9306 analysis-ready rows after dropping startup or invalid rows from 9409 interval rows.
+It reports two reduction recommendations at $|\rho|=0.976$: keep cycles/ms over instructions retired/ms in the timing-normalized view, and keep LLC references/KI over off-core demand reads/KI.
+Because timing-derived counters are excluded from the detector, the second group is the more directly relevant detector input reduction.
+
+\begin{figure}[t]
+  \centering
+  \includegraphics[width=\linewidth]{../results_indep_study/tables/normalized/pearson_heatmap.png}
+  \caption{Normalized Pearson correlation heatmap from the correlation study.}
+  \label{fig:pearson}
+\end{figure}
+
+\begin{figure}[t]
+  \centering
+  \includegraphics[width=\linewidth]{../results_indep_study/tables/normalized/spearman_heatmap.png}
+  \caption{Normalized Spearman correlation heatmap. This view is the primary basis for redundancy decisions.}
+  \label{fig:spearman}
+\end{figure}
+
+\begin{figure}[t]
+  \centering
+  \includegraphics[width=\linewidth]{../results_indep_study/tables/normalized/clustered_heatmap.png}
+  \caption{Clustered normalized correlation heatmap.}
+  \label{fig:clustered}
+\end{figure}
+
+\begin{figure}[t]
+  \centering
+  \includegraphics[width=\linewidth]{../results_indep_study/tables/normalized/dendrogram.png}
+  \caption{Correlation dendrogram used to identify redundant indicator groups.}
+  \label{fig:dendrogram}
+\end{figure}
+
+\begin{figure}[t]
+  \centering
+  \includegraphics[width=\linewidth]{../results_indep_study/tables/normalized/vif.png}
+  \caption{Variance inflation factors for normalized indicators.}
+  \label{fig:vif}
+\end{figure}
+
+\begin{figure}[t]
+  \centering
+  \includegraphics[width=\linewidth]{../results_indep_study/tables/normalized/top_correlations.png}
+  \caption{Top positive and negative normalized correlations.}
+  \label{fig:topcorr}
+\end{figure}
+
+\subsection{Selected and Removed Counters}
+
+Table~\ref{tab:selected} reports the selected one-per-family sets from the ablation artifacts.
+The selections are not identical across sets: Set 2 alone prefers LLC misses, while Set 3 alone prefers L1 stores and read bandwidth.
+This supports evaluating counter reduction under multiple workload-construction regimes instead of assuming a single universal event set.
+Figure~\ref{fig:selected-removed} shows the singleton counter scores that led to those choices; selected counters are shown in green.
+
+\begin{table*}[t]
+  \centering
+  \caption{Selected one-per-family counter sets from local ablation artifacts. L2 is unavailable in the current sequence artifacts.}
+  \label{tab:selected}
+  \begin{tabular}{llllll}
+    \toprule
+    Set & L1 & LLC & Branch/control & Core/FP & Memory/off-core \\
+    \midrule
+    Set 1 & l1d\_loads & llc\_references & branch\_instructions & instructions\_retired & total\_memory\_bandwidth \\
+    Set 2 & l1d\_loads & llc\_misses & branch\_instructions & instructions\_retired & total\_memory\_bandwidth \\
+    Set 3 & l1d\_stores & llc\_references & branch\_instructions & instructions\_retired & memory\_read\_bandwidth \\
+    \bottomrule
+  \end{tabular}
+\end{table*}
+
+\begin{figure*}[t]
+  \centering
+  \includegraphics[width=\linewidth]{figures/selected_vs_removed_counters.pdf}
+  \caption{Singleton counter-family ablation scores. Green bars are the selected representative counters; gray bars are alternatives that were removed from the reduced detector input set.}
+  \label{fig:selected-removed}
+\end{figure*}
+
+\subsection{Interpretability of Clustered States}
+
+Table~\ref{tab:clusters} summarizes the pressure ordering learned by the offline clustering stage.
+In all three sets, state 2 is clearly the highest-pressure cluster after ordering by LLC misses, memory bandwidth, branch mispredictions, and stalls when present.
+The strongest evidence is the pressure gap to state 2: Set 1 separates state 2 from state 1 by roughly 7.85 normalized pressure units, Set 2 by 7.95 units, and Set 3 by 3.32 units.
+This supports the claim that the labels are not arbitrary buckets, but recurring workload behaviors with a consistent high-pressure endpoint.
+
+The low and moderate states are less sharply separated, especially in Set 2 where the ordered pressure scores are close ($-1.46$ versus $-1.21$).
+That is a useful caution for the paper's framing: three-state clustering does produce a defensible low/moderate/high ordering, but the moderate state is best interpreted as a mixed transition region rather than a perfectly isolated operating mode.
+
+\begin{table*}[t]
+  \centering
+  \caption{Interpretability summary for train-only clustered phase labels. Pressure scores are the ordered training-set means of the normalized pressure proxy used to rename the clusters. Cluster shares use all labeled rows.}
+  \label{tab:clusters}
+  \begin{tabular}{lcc}
+    \toprule
+    Set & Ordered pressure scores (state 0 / 1 / 2) & Cluster shares (state 0 / 1 / 2) \\
+    \midrule
+    Set 1 & $-2.40 / 0.13 / 7.97$ & $28.6\% / 63.7\% / 7.7\%$ \\
+    Set 2 & $-1.46 / -1.21 / 6.74$ & $12.0\% / 71.1\% / 16.9\%$ \\
+    Set 3 & $-1.92 / -1.30 / 2.01$ & $44.3\% / 7.2\% / 48.5\%$ \\
+    \bottomrule
+  \end{tabular}
+\end{table*}
+
+\subsection{Long-Horizon Detector Fidelity}
+
+Table~\ref{tab:tree-results} reports the final global phase-detector artifacts.
+Each set uses five shallow depth-6 trees trained on 100 history features (five selected counters across 20 intervals).
+The strongest mean accuracy appears in Set 2 at 83.5\%, followed by Set 1 at 75.0\% and Set 3 at 65.0\%.
+Accuracy declines from $t{+}1$ to $t{+}5$ in every set, but the degradation is modest in Set 2 (85.0\% to 83.1\%) and larger in Set 3 (68.9\% to 62.2\%).
+
+Macro F1 is lower than accuracy in all sets because the ordered phase labels are imbalanced.
+Set 2 is the clearest example: raw accuracy is high because the dominant phase is very persistent, but mean macro F1 is only 47.7\%.
+This is exactly why the paper should report stable- and transition-case behavior in addition to aggregate accuracy.
+
+\begin{table*}[t]
+  \centering
+  \caption{Final long-horizon global detector results. Values are percentages except storage.}
+  \label{tab:tree-results}
+  \begin{tabular}{lrrrrrr}
+    \toprule
+    Set & $t{+}1$ acc. & $t{+}5$ acc. & Mean acc. & Mean macro F1 & Mean transition acc. & Storage (B) \\
+    \midrule
+    Set 1 & 77.9 & 73.4 & 75.0 & 51.4 & 28.1 & 1773 \\
+    Set 2 & 85.0 & 83.1 & 83.5 & 47.7 & 47.4 & 1259 \\
+    Set 3 & 68.9 & 62.2 & 65.0 & 44.8 & 32.1 & 1509 \\
+    \bottomrule
+  \end{tabular}
+\end{table*}
+
+\subsection{Accuracy versus Number of Counters}
+
+Figure~\ref{fig:counter-count} plots validation score against the number of counters in the ablation candidate.
+Singleton candidates expose the best event inside each family; exhaustive one-per-family candidates combine five monitored counters because L2 is absent in the current sequence artifacts.
+The selected five-counter combinations score 53.7\%, 59.7\%, and 63.7\% validation score for Sets 1--3, respectively, in the ablation stage.
+This result is not an all-counter comparison; rather, it shows that the ablation search can choose a compact five-counter detector input while retaining useful label fidelity before the long-horizon detector is trained.
+
+\begin{figure}[t]
+  \centering
+  \includegraphics[width=\linewidth]{figures/accuracy_vs_counter_count.pdf}
+  \caption{Ablation validation score versus number of counters in the candidate set. Points at one counter are singleton family candidates; points at five counters are one-per-family combinations.}
+  \label{fig:counter-count}
+\end{figure}
+
+\subsection{Decision Tree versus Simple Baselines}
+
+Figure~\ref{fig:baseline} provides a compact comparison view for the detector and the simple online baselines.
+The majority baseline confirms that the task is not solved by always predicting the dominant phase: its mean macro F1 is 26.8\%, 45.4\%, and 23.5\% for Sets 1--3.
+The last-state baseline is much stronger because adjacent intervals are often persistent, reaching mean accuracies of 72.3\%, 77.9\%, and 63.4\%.
+The reduced-counter tree improves mean accuracy over last-state in all three sets by 2.6, 5.6, and 1.6 percentage points, respectively.
+
+The more important result is on transitions.
+Last-state prediction has zero transition-case accuracy by construction, while the tree reaches 28.1\%, 47.4\%, and 32.1\% mean transition-case accuracy in Sets 1--3.
+The state-conditioned majority baseline captures some coarse label bias, but still trails the tree on both accuracy and transition sensitivity.
+These numbers support the detector's main value proposition: it is not just a persistence heuristic, but a cheap student of a richer offline phase teacher.
+
+\begin{figure}[t]
+  \centering
+  \includegraphics[width=\linewidth]{figures/baseline_comparison.pdf}
+  \caption{Baseline comparison view. The final detector should be interpreted using accuracy, macro F1, and stable/transition-case accuracy together rather than macro F1 alone.}
+  \label{fig:baseline}
+\end{figure}
+
+\subsection{Tree Depth and Hardware Cost}
+
+All final detectors use depth-6 trees, so a straightforward serial traversal requires at most six threshold comparisons per tree.
+Because the horizon predictor uses five trees, the relevant hardware question is aggregate storage across the tree bank rather than storage of a single family tree.
+The generated manifests report total storage estimates of 1773 B, 1259 B, and 1509 B for Sets 1--3.
+These correspond to 315/320, 234/239, and 268/273 internal-node/leaf counts across the five-tree bank, respectively.
+The feature vector is fixed at 100 history features in all sets, coming from five selected counters over 20 intervals.
+
+\begin{figure*}[!t]
+  \centering
+  \begin{minipage}[t]{0.48\linewidth}
+    \centering
+    \includegraphics[width=\linewidth]{figures/tree_depth_vs_accuracy.pdf}
+    \small (a) Accuracy versus maximum decision-tree depth. Depth is also the comparator-stage upper bound for a serial hardware traversal.
+  \end{minipage}\hfill
+  \begin{minipage}[t]{0.48\linewidth}
+    \centering
+    \includegraphics[width=\linewidth]{figures/hardware_cost_vs_accuracy.pdf}
+    \small (b) Estimated tree-bank storage versus accuracy. Storage is an upper bound derived from the learned five-tree horizon detector.
+  \end{minipage}
+  \caption{Tree-depth and hardware-cost views of the same detector points. The depth panel exposes the comparator-stage upper bound; the storage panel converts the learned tree banks into the model-storage estimate used in Section~\ref{sec:hardware-mapping}.}
+  \label{fig:depth}
+  \label{fig:cost}
+\end{figure*}
+
+\section{Hardware Overhead}
+
+\subsection{Mapping a Tree to Hardware}
+\label{sec:hardware-mapping}
+
+A decision tree has a direct hardware interpretation.
+Each internal node stores a feature identifier, a threshold, and child pointers.
+At inference time, the detector compares one quantized feature against the threshold and selects the next node.
+Each leaf stores a phase identifier.
+Traversal can be implemented as a comparator chain, a small finite-state machine that visits one node per cycle, or a lookup table when the feature space is aggressively quantized.
+
+For a tree with $N_{\text{nodes}}$ internal nodes and $N_{\text{leaves}}$ leaves, an approximate storage model is:
+\begin{equation}
+\begin{split}
+  \text{Storage} \approx\;& N_{\text{nodes}} \times
+  (B_{\text{feature}} + B_{\text{threshold}} + B_{\text{child}}) \\
+  &+ N_{\text{leaves}} \times B_{\text{phase}}
+  + B_{\text{per-core-state}}.
+\end{split}
+\end{equation}
+
+The latency of a simple comparator-chain or one-node-per-cycle FSM is:
+\begin{equation}
+  \text{Latency} \approx \text{tree depth comparator stages}.
+\end{equation}
+The final horizon detectors use depth-6 trees in all three sets.
+For the plotted storage estimate, we use the repository's learned node counts together with a compact feature-id, threshold, child-pointer, and phase-code model for the five-tree bank.
+This gives 100 possible history features, requiring seven feature-id bits.
+Applying the repository's storage model to the learned tree banks yields 1.26--1.77 KB across the five future-step trees, depending on the set.
+These are model-storage estimates, not synthesized RTL area or power.
+
+\subsection{Per-Core State}
+
+Each core stores the most recent selected-counter history for the 20-interval window plus any action-side bookkeeping.
+With five monitored counters, the online state is still dominated by the history buffer and the tree representation rather than by counter multiplicity.
+The hardware-visible cost therefore scales primarily with the number of monitored counters, the history length, and the total number of tree nodes.
+
+\subsection{Counter-Family Implementation}
+
+The cache and LLC family uses events such as L1 data loads/stores, LLC references, and LLC misses.
+The memory/off-core family uses off-core demand reads and memory bandwidth counters when uncore access is available.
+The branch family uses branch instructions and branch mispredictions.
+The instruction/floating-point family uses instructions retired and, when available, floating-point arithmetic events.
+The key hardware constraint is that programmable PMU slots are limited, so a one-per-family selection is more practical than continuously monitoring a broad all-counter set.
+
+\subsection{Action Lookup}
+
+The detector output can index a compact phase-to-action table similar in spirit to OS policy lookup tables, but closer to the hardware control loop.
+For example, a state tuple across families may map to a frequency request, cache policy, prefetch level, or scheduling hint.
+Unlike a software table, the hardware table must be small, deterministic, and protected against rapid oscillation.
+The hysteresis filter provides this protection by withholding action changes until a state persists.
+
+\subsection{Expected Savings and Limits}
+
+The expected detector-level savings are fewer monitored counters, lower inference cost than neural sequence models, and less reconfiguration noise than a raw threshold policy.
+System-level energy or performance savings are not claimed here because the artifacts evaluate detection quality rather than applying a real action policy.
+This distinction matters: a low-overhead detector can still hurt performance if its action table is poorly tuned, and an accurate detector can still be unusable if it triggers too many hardware changes.
+
+\section{Conclusion and Future Directions}
+
+This paper presents a lightweight phase-detection flow for multicore workloads based on correlation-guided counter reduction, counter-family ablations, train-only clustered phase labels, and long-horizon decision-tree forecasting over short selected-counter histories.
+The goal is a detector that is accurate enough to guide hardware adaptation while remaining simple enough to implement with counters, comparators, small tables, and bounded per-core state.
+The results support the main feasibility story: offline clustering over the full safe counter set can define interpretable low/moderate/high pressure states, ablation can reduce the online interface to five counters, and a bank of shallow trees can forecast the next five phase labels with useful fidelity and clear gains over simple persistence baselines.
+
+The main limitations are equally clear.
+The current artifacts do not include matched all-counter, GMM, or neural student baselines on the same splits, and they do not connect predicted phase horizons to real DVFS, cache, prefetch, or scheduling actions.
+Future work should therefore include a direct comparison against richer online students, an RTL prototype, action-level evaluation using the five-step horizon, SPEC CPU2017 expansion, online adaptive trees, cross-architecture validation, and extension to heterogeneous CPU/GPU systems.
+
+\FloatBarrier
+\begingroup
+\small
+\bibliographystyle{plain}
+\bibliography{references}
+\endgroup
+
+\end{document}

@@ -1,0 +1,478 @@
+{
+  "affinity": [
+    0,
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7
+  ],
+  "alias_map": {
+    "branch_instructions": {
+      "analysis_confident": true,
+      "candidate_count": 3,
+      "candidates_checked": [
+        "BR_INST_RETIRED.ALL_BRANCHES",
+        "branches",
+        "branch-instructions"
+      ],
+      "collection_cost": 1,
+      "collection_scope": "task_local",
+      "event_alias": "",
+      "family": "branch_instructions",
+      "generic_candidates": [
+        "branches",
+        "branch-instructions"
+      ],
+      "interpretability": 8,
+      "label": "Branch instructions",
+      "portability": 9,
+      "requires_system_wide": false,
+      "selected_event": "br_inst_retired.all_branches",
+      "selected_via": "BR_INST_RETIRED.ALL_BRANCHES",
+      "selection_kind": "vendor_preferred",
+      "supported": true,
+      "vendor_candidates": [
+        "BR_INST_RETIRED.ALL_BRANCHES"
+      ]
+    },
+    "branch_mispredictions": {
+      "analysis_confident": true,
+      "candidate_count": 2,
+      "candidates_checked": [
+        "BR_MISP_RETIRED.ALL_BRANCHES",
+        "branch-misses"
+      ],
+      "collection_cost": 1,
+      "collection_scope": "task_local",
+      "event_alias": "",
+      "family": "branch_mispredictions",
+      "generic_candidates": [
+        "branch-misses"
+      ],
+      "interpretability": 9,
+      "label": "Branch mispredictions",
+      "portability": 9,
+      "requires_system_wide": false,
+      "selected_event": "br_misp_retired.all_branches",
+      "selected_via": "BR_MISP_RETIRED.ALL_BRANCHES",
+      "selection_kind": "vendor_preferred",
+      "supported": true,
+      "vendor_candidates": [
+        "BR_MISP_RETIRED.ALL_BRANCHES"
+      ]
+    },
+    "cycles": {
+      "analysis_confident": true,
+      "candidate_count": 3,
+      "candidates_checked": [
+        "CPU_CLK_UNHALTED.THREAD",
+        "cycles",
+        "cpu-cycles"
+      ],
+      "collection_cost": 1,
+      "collection_scope": "task_local",
+      "event_alias": "",
+      "family": "cycles",
+      "generic_candidates": [
+        "cycles",
+        "cpu-cycles"
+      ],
+      "interpretability": 10,
+      "label": "Cycles",
+      "portability": 10,
+      "requires_system_wide": false,
+      "selected_event": "cpu_clk_unhalted.thread",
+      "selected_via": "CPU_CLK_UNHALTED.THREAD",
+      "selection_kind": "vendor_preferred",
+      "supported": true,
+      "vendor_candidates": [
+        "CPU_CLK_UNHALTED.THREAD"
+      ]
+    },
+    "fp_arithmetic": {
+      "analysis_confident": false,
+      "candidate_count": 1,
+      "candidates_checked": [
+        "FP_ARITH_INST_RETIRED.SCALAR_DOUBLE"
+      ],
+      "collection_cost": 2,
+      "collection_scope": "task_local",
+      "event_alias": "",
+      "family": "fp_arithmetic",
+      "generic_candidates": [],
+      "interpretability": 8,
+      "label": "Floating-point arithmetic",
+      "portability": 5,
+      "requires_system_wide": false,
+      "selected_event": "",
+      "selected_via": "",
+      "selection_kind": "unsupported",
+      "supported": false,
+      "vendor_candidates": [
+        "FP_ARITH_INST_RETIRED.SCALAR_DOUBLE"
+      ]
+    },
+    "instructions_retired": {
+      "analysis_confident": true,
+      "candidate_count": 2,
+      "candidates_checked": [
+        "INST_RETIRED.ANY",
+        "instructions"
+      ],
+      "collection_cost": 1,
+      "collection_scope": "task_local",
+      "event_alias": "",
+      "family": "instructions_retired",
+      "generic_candidates": [
+        "instructions"
+      ],
+      "interpretability": 10,
+      "label": "Instructions retired",
+      "portability": 10,
+      "requires_system_wide": false,
+      "selected_event": "inst_retired.any",
+      "selected_via": "INST_RETIRED.ANY",
+      "selection_kind": "vendor_preferred",
+      "supported": true,
+      "vendor_candidates": [
+        "INST_RETIRED.ANY"
+      ]
+    },
+    "l1d_loads": {
+      "analysis_confident": true,
+      "candidate_count": 3,
+      "candidates_checked": [
+        "MEM_UOPS_RETIRED.ALL_LOADS",
+        "L1-dcache-loads",
+        "cpu/L1-dcache-loads/"
+      ],
+      "collection_cost": 2,
+      "collection_scope": "task_local",
+      "event_alias": "",
+      "family": "l1d_loads",
+      "generic_candidates": [
+        "L1-dcache-loads",
+        "cpu/L1-dcache-loads/"
+      ],
+      "interpretability": 7,
+      "label": "L1 data loads",
+      "portability": 7,
+      "requires_system_wide": false,
+      "selected_event": "mem_uops_retired.all_loads",
+      "selected_via": "MEM_UOPS_RETIRED.ALL_LOADS",
+      "selection_kind": "vendor_preferred",
+      "supported": true,
+      "vendor_candidates": [
+        "MEM_UOPS_RETIRED.ALL_LOADS"
+      ]
+    },
+    "l1d_stores": {
+      "analysis_confident": true,
+      "candidate_count": 3,
+      "candidates_checked": [
+        "MEM_UOPS_RETIRED.ALL_STORES",
+        "L1-dcache-stores",
+        "cpu/L1-dcache-stores/"
+      ],
+      "collection_cost": 2,
+      "collection_scope": "task_local",
+      "event_alias": "",
+      "family": "l1d_stores",
+      "generic_candidates": [
+        "L1-dcache-stores",
+        "cpu/L1-dcache-stores/"
+      ],
+      "interpretability": 7,
+      "label": "L1 data stores",
+      "portability": 6,
+      "requires_system_wide": false,
+      "selected_event": "mem_uops_retired.all_stores",
+      "selected_via": "MEM_UOPS_RETIRED.ALL_STORES",
+      "selection_kind": "vendor_preferred",
+      "supported": true,
+      "vendor_candidates": [
+        "MEM_UOPS_RETIRED.ALL_STORES"
+      ]
+    },
+    "l2_misses": {
+      "analysis_confident": false,
+      "candidate_count": 4,
+      "candidates_checked": [
+        "L2_RQSTS.MISS",
+        "l2_rqsts.miss",
+        "L2-dcache-load-misses",
+        "cpu/L2-dcache-load-misses/"
+      ],
+      "collection_cost": 2,
+      "collection_scope": "task_local",
+      "event_alias": "",
+      "family": "l2_misses",
+      "generic_candidates": [
+        "l2_rqsts.miss",
+        "L2-dcache-load-misses",
+        "cpu/L2-dcache-load-misses/"
+      ],
+      "interpretability": 8,
+      "label": "L2 misses",
+      "portability": 7,
+      "requires_system_wide": false,
+      "selected_event": "",
+      "selected_via": "",
+      "selection_kind": "unsupported",
+      "supported": false,
+      "vendor_candidates": [
+        "L2_RQSTS.MISS"
+      ]
+    },
+    "llc_misses": {
+      "analysis_confident": true,
+      "candidate_count": 5,
+      "candidates_checked": [
+        "LONGEST_LAT_CACHE.MISS",
+        "LLC_MISSES",
+        "cache-misses",
+        "LLC-load-misses",
+        "cpu/LLC-load-misses/"
+      ],
+      "collection_cost": 2,
+      "collection_scope": "task_local",
+      "event_alias": "",
+      "family": "llc_misses",
+      "generic_candidates": [
+        "cache-misses",
+        "LLC-load-misses",
+        "cpu/LLC-load-misses/"
+      ],
+      "interpretability": 8,
+      "label": "LLC misses",
+      "portability": 8,
+      "requires_system_wide": false,
+      "selected_event": "longest_lat_cache.miss",
+      "selected_via": "LONGEST_LAT_CACHE.MISS",
+      "selection_kind": "vendor_preferred",
+      "supported": true,
+      "vendor_candidates": [
+        "LONGEST_LAT_CACHE.MISS",
+        "LLC_MISSES"
+      ]
+    },
+    "llc_references": {
+      "analysis_confident": true,
+      "candidate_count": 5,
+      "candidates_checked": [
+        "LONGEST_LAT_CACHE.REFERENCE",
+        "LLC_REFERENCES",
+        "cache-references",
+        "LLC-loads",
+        "cpu/LLC-loads/"
+      ],
+      "collection_cost": 2,
+      "collection_scope": "task_local",
+      "event_alias": "",
+      "family": "llc_references",
+      "generic_candidates": [
+        "cache-references",
+        "LLC-loads",
+        "cpu/LLC-loads/"
+      ],
+      "interpretability": 8,
+      "label": "LLC references",
+      "portability": 8,
+      "requires_system_wide": false,
+      "selected_event": "longest_lat_cache.reference",
+      "selected_via": "LONGEST_LAT_CACHE.REFERENCE",
+      "selection_kind": "vendor_preferred",
+      "supported": true,
+      "vendor_candidates": [
+        "LONGEST_LAT_CACHE.REFERENCE",
+        "LLC_REFERENCES"
+      ]
+    },
+    "memory_read_bandwidth": {
+      "analysis_confident": true,
+      "candidate_count": 1,
+      "candidates_checked": [
+        "READ"
+      ],
+      "collection_cost": 4,
+      "collection_scope": "system_wide_uncore",
+      "event_alias": "cas_count_read",
+      "family": "memory_read_bandwidth",
+      "generic_candidates": [],
+      "interpretability": 9,
+      "label": "Memory read bandwidth",
+      "portability": 3,
+      "requires_system_wide": true,
+      "selected_event": "uncore_imc/cas_count_read/",
+      "selected_via": "uncore_imc/cas_count_read/",
+      "selection_kind": "vendor_preferred_uncore",
+      "supported": true,
+      "vendor_candidates": [
+        "READ"
+      ]
+    },
+    "memory_write_bandwidth": {
+      "analysis_confident": true,
+      "candidate_count": 1,
+      "candidates_checked": [
+        "WRITE"
+      ],
+      "collection_cost": 4,
+      "collection_scope": "system_wide_uncore",
+      "event_alias": "cas_count_write",
+      "family": "memory_write_bandwidth",
+      "generic_candidates": [],
+      "interpretability": 9,
+      "label": "Memory write bandwidth",
+      "portability": 3,
+      "requires_system_wide": true,
+      "selected_event": "uncore_imc/cas_count_write/",
+      "selected_via": "uncore_imc/cas_count_write/",
+      "selection_kind": "vendor_preferred_uncore",
+      "supported": true,
+      "vendor_candidates": [
+        "WRITE"
+      ]
+    },
+    "offcore_demand_data_reads": {
+      "analysis_confident": true,
+      "candidate_count": 1,
+      "candidates_checked": [
+        "OFFCORE_REQUESTS.DEMAND_DATA_RD"
+      ],
+      "collection_cost": 3,
+      "collection_scope": "task_local",
+      "event_alias": "",
+      "family": "offcore_demand_data_reads",
+      "generic_candidates": [],
+      "interpretability": 7,
+      "label": "Off-core / DRAM demand reads",
+      "portability": 4,
+      "requires_system_wide": false,
+      "selected_event": "offcore_requests.demand_data_rd",
+      "selected_via": "OFFCORE_REQUESTS.DEMAND_DATA_RD",
+      "selection_kind": "vendor_preferred",
+      "supported": true,
+      "vendor_candidates": [
+        "OFFCORE_REQUESTS.DEMAND_DATA_RD"
+      ]
+    },
+    "resource_stalls": {
+      "analysis_confident": true,
+      "candidate_count": 4,
+      "candidates_checked": [
+        "RESOURCE_STALLS.ANY",
+        "RESOURCE_STALLS",
+        "stalled-cycles-frontend",
+        "stalled-cycles-backend"
+      ],
+      "collection_cost": 2,
+      "collection_scope": "task_local",
+      "event_alias": "",
+      "family": "resource_stalls",
+      "generic_candidates": [
+        "stalled-cycles-frontend",
+        "stalled-cycles-backend"
+      ],
+      "interpretability": 6,
+      "label": "Resource stalls",
+      "portability": 6,
+      "requires_system_wide": false,
+      "selected_event": "resource_stalls.any",
+      "selected_via": "RESOURCE_STALLS.ANY",
+      "selection_kind": "vendor_preferred",
+      "supported": true,
+      "vendor_candidates": [
+        "RESOURCE_STALLS.ANY",
+        "RESOURCE_STALLS"
+      ]
+    },
+    "total_memory_bandwidth": {
+      "analysis_confident": true,
+      "candidate_count": 2,
+      "candidates_checked": [
+        "READ",
+        "WRITE"
+      ],
+      "collection_cost": 4,
+      "collection_scope": "derived_uncore",
+      "event_alias": "",
+      "family": "total_memory_bandwidth",
+      "generic_candidates": [],
+      "interpretability": 9,
+      "label": "Total memory bandwidth",
+      "portability": 4,
+      "requires_system_wide": true,
+      "selected_event": "derived_total_memory_bandwidth",
+      "selected_via": "uncore_imc/cas_count_read/ + uncore_imc/cas_count_write/",
+      "selection_kind": "derived_uncore_total",
+      "supported": true,
+      "vendor_candidates": [
+        "READ",
+        "WRITE"
+      ]
+    }
+  },
+  "collect_aggregate": false,
+  "collect_interval": true,
+  "collect_uncore": false,
+  "collection_interval_ms": 10,
+  "command": [
+    "taskset",
+    "-c",
+    "0,1,2,3,4,5,6,7",
+    "/home/kk6081/res/third_party/parsec-benchmark/bin/parsecmgmt",
+    "-a",
+    "run",
+    "-p",
+    "canneal",
+    "-n",
+    "8",
+    "-i",
+    "test"
+  ],
+  "cpu_or_core_id": "0,1,2,3,4,5,6,7",
+  "pmu_study_readiness": {
+    "missing_required_confident_families": [],
+    "raw_confident_families": [
+      "branch_instructions",
+      "branch_mispredictions",
+      "cycles",
+      "instructions_retired",
+      "l1d_loads",
+      "l1d_stores",
+      "llc_misses",
+      "llc_references",
+      "offcore_demand_data_reads",
+      "resource_stalls"
+    ],
+    "strict_hardware_study_reason": "",
+    "study_ready": true,
+    "study_ready_core": true,
+    "study_ready_uncore": false,
+    "uncore_devices_present": true,
+    "uncore_imc_devices": [
+      "uncore_imc_0",
+      "uncore_imc_1",
+      "uncore_imc_2",
+      "uncore_imc_3"
+    ],
+    "uncore_policy_blocked": true,
+    "uncore_probe_event": "uncore_imc_0/cas_count_read/",
+    "uncore_probe_output": "",
+    "uncore_probe_returncode": 0,
+    "uncore_reason": "System-wide perf is blocked on this host. perf_event_paranoid=2; lower it or grant perf capability for uncore collection."
+  },
+  "requested_duration_ms": null,
+  "requested_input_size": "test",
+  "requested_phase_ms": null,
+  "run_dir": "/home/kk6081/res/results/raw/parsec_canneal_t8_r1_20260413T231222Z",
+  "run_id": "parsec_canneal_t8_r1_20260413T231222Z",
+  "suite": "parsec",
+  "threads": 8,
+  "uncore_events": [],
+  "workload": "canneal"
+}

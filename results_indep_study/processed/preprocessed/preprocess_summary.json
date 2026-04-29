@@ -1,0 +1,110 @@
+{
+  "analysis_row_filter": {
+    "dropped_reasons": {
+      "non_positive_cycles": 100,
+      "non_positive_instructions_retired": 100,
+      "non_positive_interval_duration_ms": 0
+    },
+    "dropped_rows": 103,
+    "input_rows": 9409,
+    "kept_rows": 9306
+  },
+  "confident_families": [
+    "branch_instructions",
+    "branch_mispredictions",
+    "cycles",
+    "instructions_retired",
+    "l1d_loads",
+    "l1d_stores",
+    "llc_misses",
+    "llc_references",
+    "offcore_demand_data_reads",
+    "resource_stalls"
+  ],
+  "confident_families_exposed": [
+    "branch_instructions",
+    "branch_mispredictions",
+    "cycles",
+    "instructions_retired",
+    "l1d_loads",
+    "l1d_stores",
+    "llc_misses",
+    "llc_references",
+    "memory_read_bandwidth",
+    "memory_write_bandwidth",
+    "offcore_demand_data_reads",
+    "resource_stalls",
+    "total_memory_bandwidth"
+  ],
+  "excluded_generic_fallback_columns": [],
+  "excluded_unsupported_families": [
+    "fp_arithmetic",
+    "l2_misses"
+  ],
+  "input_rows": 9409,
+  "medians": {
+    "counter__branch_instructions": 731005.5,
+    "counter__branch_mispredictions": 35985.0,
+    "counter__cycles": 5204821.0,
+    "counter__instructions_retired": 3329439.0,
+    "counter__l1d_loads": 850011.0,
+    "counter__l1d_stores": 351875.0,
+    "counter__llc_misses": 8247.0,
+    "counter__llc_references": 38838.0,
+    "counter__offcore_demand_data_reads": 15631.5,
+    "counter__resource_stalls": 481233.0
+  },
+  "missing_required_confident_families": [],
+  "missingness": {
+    "counter__branch_instructions": 0.008821341268997768,
+    "counter__branch_mispredictions": 0.00839621638856414,
+    "counter__cycles": 0.008608778828780955,
+    "counter__instructions_retired": 0.00839621638856414,
+    "counter__l1d_loads": 0.008502497608672548,
+    "counter__l1d_stores": 0.008608778828780955,
+    "counter__llc_misses": 0.008715060048889361,
+    "counter__llc_references": 0.008289935168455734,
+    "counter__offcore_demand_data_reads": 0.00839621638856414,
+    "counter__resource_stalls": 0.009246466149431396
+  },
+  "observed_system_wide_uncore_columns": [],
+  "output_files": {
+    "derived_clean": "/home/kk6081/res/results/processed/preprocessed/derived_clean.csv",
+    "derived_winsorized": "/home/kk6081/res/results/processed/preprocessed/derived_winsorized.csv",
+    "normalized_clean": "/home/kk6081/res/results/processed/preprocessed/normalized_clean.csv",
+    "normalized_winsorized": "/home/kk6081/res/results/processed/preprocessed/normalized_winsorized.csv",
+    "raw_clean": "/home/kk6081/res/results/processed/preprocessed/raw_clean.csv",
+    "raw_winsorized": "/home/kk6081/res/results/processed/preprocessed/raw_winsorized.csv"
+  },
+  "raw_counter_columns_initial": [
+    "counter__instructions_retired",
+    "counter__cycles",
+    "counter__branch_instructions",
+    "counter__branch_mispredictions",
+    "counter__l1d_loads",
+    "counter__l1d_stores",
+    "counter__llc_references",
+    "counter__llc_misses",
+    "counter__offcore_demand_data_reads",
+    "counter__resource_stalls"
+  ],
+  "raw_counter_columns_kept": [
+    "counter__instructions_retired",
+    "counter__cycles",
+    "counter__branch_instructions",
+    "counter__branch_mispredictions",
+    "counter__l1d_loads",
+    "counter__l1d_stores",
+    "counter__llc_references",
+    "counter__llc_misses",
+    "counter__offcore_demand_data_reads",
+    "counter__resource_stalls"
+  ],
+  "removed_constant_columns": [],
+  "strict_hardware_study_reason": "",
+  "study_ready": true,
+  "study_ready_core": true,
+  "study_ready_uncore": false,
+  "uncore_policy_blocked": true,
+  "uncore_reason": "System-wide perf is blocked on this host. perf_event_paranoid=2; lower it or grant perf capability for uncore collection."
+}

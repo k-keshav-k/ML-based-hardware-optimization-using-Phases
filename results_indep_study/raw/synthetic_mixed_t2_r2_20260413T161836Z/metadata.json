@@ -1,0 +1,262 @@
+{
+  "affinity": [
+    0,
+    1
+  ],
+  "alias_map": {
+    "branch_instructions": {
+      "candidate_count": 3,
+      "candidates_checked": [
+        "RETIRED_BR_INST",
+        "branches",
+        "branch-instructions"
+      ],
+      "collection_cost": 1,
+      "family": "branch_instructions",
+      "interpretability": 8,
+      "label": "Branch instructions",
+      "portability": 9,
+      "selected_event": "branches",
+      "selected_via": "branches",
+      "supported": true
+    },
+    "branch_mispredictions": {
+      "candidate_count": 2,
+      "candidates_checked": [
+        "RETIRED_BR_INST_MISP",
+        "branch-misses"
+      ],
+      "collection_cost": 1,
+      "family": "branch_mispredictions",
+      "interpretability": 9,
+      "label": "Branch mispredictions",
+      "portability": 9,
+      "selected_event": "branch-misses",
+      "selected_via": "branch-misses",
+      "supported": true
+    },
+    "cycles": {
+      "candidate_count": 3,
+      "candidates_checked": [
+        "CYCLES_NOT_IN_HALT",
+        "cycles",
+        "cpu-cycles"
+      ],
+      "collection_cost": 1,
+      "family": "cycles",
+      "interpretability": 10,
+      "label": "Cycles",
+      "portability": 10,
+      "selected_event": "cycles",
+      "selected_via": "cycles",
+      "supported": true
+    },
+    "fp_arithmetic": {
+      "candidate_count": 1,
+      "candidates_checked": [
+        "RETIRED_SSE_AVX_FLOPS"
+      ],
+      "collection_cost": 2,
+      "family": "fp_arithmetic",
+      "interpretability": 8,
+      "label": "Floating-point arithmetic",
+      "portability": 5,
+      "selected_event": "",
+      "selected_via": "",
+      "supported": false
+    },
+    "instructions_retired": {
+      "candidate_count": 2,
+      "candidates_checked": [
+        "RETIRED_INST",
+        "instructions"
+      ],
+      "collection_cost": 1,
+      "family": "instructions_retired",
+      "interpretability": 10,
+      "label": "Instructions retired",
+      "portability": 10,
+      "selected_event": "instructions",
+      "selected_via": "instructions",
+      "supported": true
+    },
+    "l1d_loads": {
+      "candidate_count": 3,
+      "candidates_checked": [
+        "LS_DISPATCH.LOADS",
+        "L1-dcache-loads",
+        "cpu/L1-dcache-loads/"
+      ],
+      "collection_cost": 2,
+      "family": "l1d_loads",
+      "interpretability": 7,
+      "label": "L1 data loads",
+      "portability": 7,
+      "selected_event": "L1-dcache-loads",
+      "selected_via": "L1-dcache-loads",
+      "supported": true
+    },
+    "l1d_stores": {
+      "candidate_count": 3,
+      "candidates_checked": [
+        "LS_DISPATCH.STORES",
+        "L1-dcache-stores",
+        "cpu/L1-dcache-stores/"
+      ],
+      "collection_cost": 2,
+      "family": "l1d_stores",
+      "interpretability": 7,
+      "label": "L1 data stores",
+      "portability": 6,
+      "selected_event": "",
+      "selected_via": "",
+      "supported": false
+    },
+    "l2_misses": {
+      "candidate_count": 4,
+      "candidates_checked": [
+        "L2 Miss",
+        "l2_rqsts.miss",
+        "L2-dcache-load-misses",
+        "cpu/L2-dcache-load-misses/"
+      ],
+      "collection_cost": 2,
+      "family": "l2_misses",
+      "interpretability": 8,
+      "label": "L2 misses",
+      "portability": 7,
+      "selected_event": "",
+      "selected_via": "",
+      "supported": false
+    },
+    "llc_misses": {
+      "candidate_count": 4,
+      "candidates_checked": [
+        "L3 Miss",
+        "cache-misses",
+        "LLC-load-misses",
+        "cpu/LLC-load-misses/"
+      ],
+      "collection_cost": 2,
+      "family": "llc_misses",
+      "interpretability": 8,
+      "label": "LLC misses",
+      "portability": 8,
+      "selected_event": "cache-misses",
+      "selected_via": "cache-misses",
+      "supported": true
+    },
+    "llc_references": {
+      "candidate_count": 4,
+      "candidates_checked": [
+        "L3 Access",
+        "cache-references",
+        "LLC-loads",
+        "cpu/LLC-loads/"
+      ],
+      "collection_cost": 2,
+      "family": "llc_references",
+      "interpretability": 8,
+      "label": "LLC references",
+      "portability": 8,
+      "selected_event": "cache-references",
+      "selected_via": "cache-references",
+      "supported": true
+    },
+    "memory_read_bandwidth": {
+      "candidate_count": 1,
+      "candidates_checked": [
+        "Local DRAM Read Data Bytes"
+      ],
+      "collection_cost": 4,
+      "family": "memory_read_bandwidth",
+      "interpretability": 9,
+      "label": "Memory read bandwidth",
+      "portability": 3,
+      "selected_event": "",
+      "selected_via": "",
+      "supported": false
+    },
+    "memory_write_bandwidth": {
+      "candidate_count": 1,
+      "candidates_checked": [
+        "Local DRAM Write Data Bytes"
+      ],
+      "collection_cost": 4,
+      "family": "memory_write_bandwidth",
+      "interpretability": 9,
+      "label": "Memory write bandwidth",
+      "portability": 3,
+      "selected_event": "",
+      "selected_via": "",
+      "supported": false
+    },
+    "offcore_demand_data_reads": {
+      "candidate_count": 2,
+      "candidates_checked": [
+        "DC Fills from Local Memory",
+        "DC Fills from Remote Memory"
+      ],
+      "collection_cost": 3,
+      "family": "offcore_demand_data_reads",
+      "interpretability": 7,
+      "label": "Off-core / DRAM demand reads",
+      "portability": 4,
+      "selected_event": "",
+      "selected_via": "",
+      "supported": false
+    },
+    "resource_stalls": {
+      "candidate_count": 3,
+      "candidates_checked": [
+        "DISPATCH_STALLS",
+        "stalled-cycles-frontend",
+        "stalled-cycles-backend"
+      ],
+      "collection_cost": 2,
+      "family": "resource_stalls",
+      "interpretability": 6,
+      "label": "Resource stalls",
+      "portability": 6,
+      "selected_event": "stalled-cycles-frontend",
+      "selected_via": "stalled-cycles-frontend",
+      "supported": true
+    },
+    "total_memory_bandwidth": {
+      "candidate_count": 1,
+      "candidates_checked": [
+        "Total Memory Bw"
+      ],
+      "collection_cost": 4,
+      "family": "total_memory_bandwidth",
+      "interpretability": 9,
+      "label": "Total memory bandwidth",
+      "portability": 4,
+      "selected_event": "",
+      "selected_via": "",
+      "supported": false
+    }
+  },
+  "command": [
+    "taskset",
+    "-c",
+    "0,1",
+    "/home/kk6081/res/synthetic_workloads/bin/phase_bench",
+    "--workload",
+    "mixed",
+    "--threads",
+    "2",
+    "--duration-ms",
+    "250",
+    "--phase-ms",
+    "50",
+    "--phase-log",
+    "/home/kk6081/res/results/raw/synthetic_mixed_t2_r2_20260413T161836Z/phase_log.csv"
+  ],
+  "cpu_or_core_id": "0,1",
+  "run_dir": "/home/kk6081/res/results/raw/synthetic_mixed_t2_r2_20260413T161836Z",
+  "run_id": "synthetic_mixed_t2_r2_20260413T161836Z",
+  "suite": "synthetic",
+  "threads": 2,
+  "workload": "mixed"
+}

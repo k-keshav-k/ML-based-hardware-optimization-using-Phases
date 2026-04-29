@@ -11,6 +11,7 @@ import numpy as np
 @dataclass
 class TreeNode:
     prediction: int
+    counts: dict[int, int]
     feature: int = -1
     threshold: float = 0.0
     left: "TreeNode | None" = None
@@ -22,6 +23,13 @@ class TreeNode:
         if row[self.feature] <= self.threshold:
             return self.left.predict_one(row)
         return self.right.predict_one(row)
+
+    def leaf_for(self, row: np.ndarray) -> "TreeNode":
+        if self.feature < 0 or self.left is None or self.right is None:
+            return self
+        if row[self.feature] <= self.threshold:
+            return self.left.leaf_for(row)
+        return self.right.leaf_for(row)
 
 
 class DecisionTree:
@@ -39,9 +47,23 @@ class DecisionTree:
             raise ValueError("Tree has not been fitted")
         return np.asarray([self.root.predict_one(row) for row in x], dtype=int)
 
+    def predict_top_k(self, x: np.ndarray, k: int, num_classes: int = 3) -> np.ndarray:
+        if self.root is None:
+            raise ValueError("Tree has not been fitted")
+        output = np.full((x.shape[0], k), -1, dtype=int)
+        for index, row in enumerate(x):
+            leaf = self.root.leaf_for(row)
+            ordered = [label for label, _count in sorted(leaf.counts.items(), key=lambda item: (-item[1], item[0]))]
+            for label in range(num_classes):
+                if label not in leaf.counts:
+                    ordered.append(label)
+            output[index, : min(k, len(ordered))] = ordered[:k]
+        return output
+
     def _build(self, x: np.ndarray, y: np.ndarray, depth: int) -> TreeNode:
-        prediction = Counter(y.tolist()).most_common(1)[0][0]
-        node = TreeNode(prediction=int(prediction))
+        counts = Counter(y.tolist())
+        prediction = counts.most_common(1)[0][0]
+        node = TreeNode(prediction=int(prediction), counts={int(label): int(count) for label, count in counts.items()})
         if depth >= self.max_depth or len(set(y.tolist())) <= 1 or x.shape[0] < 2 * self.min_samples_leaf:
             return node
         split = self._best_split(x, y)

@@ -23,6 +23,10 @@ from phase_family_ml.labels import (
 )
 from phase_family_ml.students import HistoryLookupModel, LookupBackoffModel, train_students_for_experiment
 from phase_family_ml.teacher import _build_examples, train_teachers_for_experiment
+from phase_family_ml.train_phase_detector import (
+    run_phase_detector_depth_sweep_for_experiment,
+    train_phase_detector_for_experiment,
+)
 from phase_family_ml.transformer_model import build_family_transformer, require_torch
 from phase_family_ml.collect import family_lm_events, family_lm_readiness
 from phase_family_ml.splits import build_experiment_splits
@@ -266,8 +270,48 @@ class PhaseFamilyMLTests(unittest.TestCase):
             self.assertEqual(core_row.get("selected_counters", ""), "counter__fp_arithmetic")
             selected_first = selected_rows[0]
             self.assertEqual(selected_first.get("counter_name", ""), "counter__fp_arithmetic")
+            self.assertEqual(selected_first.get("phase_label_source", ""), "train_split_kmeans_full_safe_counters")
             self.assertIn("counter_value", selected_first)
             self.assertIn("future_counter_value_20", selected_first)
+
+            summary_rows = train_phase_detector_for_experiment(
+                experiment_dir=root / "sequences_selected" / "pooled_run_group",
+                scope="global",
+                output_dir=root / "phase_detector",
+                horizon=20,
+                history_length=4,
+                prediction_horizon=5,
+                tree_max_depth=3,
+                tree_min_leaf=2,
+            )
+            summary = summary_rows[0]
+            self.assertEqual(summary.get("phase_label_source"), "train_split_kmeans_full_safe_counters")
+            self.assertEqual(summary.get("history_length"), 4)
+            self.assertEqual(summary.get("prediction_horizon"), 5)
+            self.assertIn("top1_accuracy", summary)
+            self.assertIn("stable_case_accuracy", summary)
+            self.assertIn("transition_case_accuracy", summary)
+            models = {row.get("model") for row in summary_rows}
+            self.assertIn("online_phase_history_tree", models)
+            self.assertIn("baseline_last_state", models)
+            self.assertIn("baseline_majority", models)
+            self.assertIn("baseline_state_conditioned_majority", models)
+            self.assertTrue((root / "phase_detector" / "phase_detector_summary.csv").exists())
+
+            sweep_rows = run_phase_detector_depth_sweep_for_experiment(
+                experiment_dir=root / "sequences_selected" / "pooled_run_group",
+                scope="global",
+                output_dir=root / "phase_detector",
+                horizon=20,
+                history_length=4,
+                prediction_horizon=5,
+                tree_depths=[1, 2, 3],
+                tree_min_leaf=2,
+            )
+            self.assertEqual(len(sweep_rows), 3)
+            self.assertEqual([int(row["tree_max_depth"]) for row in sweep_rows], [1, 2, 3])
+            self.assertTrue(all("mean_accuracy" in row for row in sweep_rows))
+            self.assertTrue((root / "phase_detector" / "phase_detector_depth_sweep_summary.csv").exists())
 
     def test_sequences_prefer_global_one_per_family_selection(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

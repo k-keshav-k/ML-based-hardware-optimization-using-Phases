@@ -5,15 +5,13 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
-from hpc_phase_analysis.io_utils import load_csv_rows, write_csv_rows
+from hpc_phase_analysis.io_utils import write_csv_rows
 
 from .ablation import run_ablation
-from .config import apply_runtime_profile, load_config
-from .evaluation import evaluate_outputs
+from .config import load_config
 from .labels import build_counter_sequences
 from .orchestration import experiment_dirs, scopes_for_experiment
-from .students import train_students_for_experiment
-from .teacher import train_teachers_for_experiment
+from .train_phase_detector import run_phase_detector_depth_sweep_for_experiment, train_phase_detector_for_experiment
 
 
 def run_pipeline_for_dataset(
@@ -27,19 +25,19 @@ def run_pipeline_for_dataset(
     """Run the full family-ML pipeline for one input dataset."""
 
     dataset_cfg = config["dataset"]
+    detector_cfg = dict(config["phase_detector"])
+    sequence_horizon = max(int(dataset_cfg["horizon"]), int(detector_cfg["prediction_horizon"]))
     root = Path(output_dir)
     root.mkdir(parents=True, exist_ok=True)
 
     sequences_root = root / "counter_sequences"
     ablation_root = root / "ablation"
-    teacher_root = root / "teacher"
-    students_root = root / "students"
-    eval_root = root / "evaluation"
+    detector_root = root / "phase_detector"
 
     build_counter_sequences(
         input_csv=input_csv,
         output_root=sequences_root,
-        horizon=int(dataset_cfg["horizon"]),
+        horizon=sequence_horizon,
         threshold_mode=threshold_mode,
         experiment_mode=experiment_mode,
         train_fraction=float(config["splits"]["train_fraction"]),
@@ -55,7 +53,7 @@ def run_pipeline_for_dataset(
                 input_csv=input_csv,
                 experiment_dir=exp_dir,
                 scope=scope,
-                horizon=int(dataset_cfg["horizon"]),
+                horizon=sequence_horizon,
                 output_csv=ablation_root / f"ablation_{exp_dir.name}_{scope}.csv",
                 weights=dict(config["ablation"]["score_weights"]),
                 tree_max_depth=int(config["ablation"]["tree_max_depth"]),
@@ -69,89 +67,62 @@ def run_pipeline_for_dataset(
     write_csv_rows(ablation_root / "family_ablation_results.csv", ablation_rows)
 
     # Refresh streams with the selected per-family counters from ablation so
-    # teacher training is grounded in the final chosen counter values.
+    # the hardware detector uses exactly one representative counter per family.
     build_counter_sequences(
         input_csv=input_csv,
         output_root=sequences_root,
-        horizon=int(dataset_cfg["horizon"]),
+        horizon=sequence_horizon,
         threshold_mode=threshold_mode,
         experiment_mode=experiment_mode,
         train_fraction=float(config["splits"]["train_fraction"]),
         val_fraction=float(config["splits"]["val_fraction"]),
         seed=int(config["random_seed"]),
         ablation_results=ablation_root / "family_ablation_results.csv",
-        require_ablation_coverage=True,
     )
 
+    detector_rows: list[dict[str, object]] = []
+    detector_sweep_rows: list[dict[str, object]] = []
+    sweep_depths = [int(item) for item in detector_cfg.get("depth_sweep_depths", []) if int(item) > 0]
     for exp_dir in experiment_dirs(sequences_root):
         for scope in scopes_for_experiment(exp_dir):
-            teacher_dir = teacher_root / exp_dir.name / scope
-            train_teachers_for_experiment(
-                experiment_dir=exp_dir,
-                scope=scope,
-                output_dir=teacher_dir,
-                horizon=int(dataset_cfg["horizon"]),
-                history_length=int(dataset_cfg["history_length"]),
-                teacher_config=dict(config["teacher"]),
-                seed=int(config["random_seed"]),
+            detector_rows.extend(
+                train_phase_detector_for_experiment(
+                    experiment_dir=exp_dir,
+                    scope=scope,
+                    output_dir=detector_root / exp_dir.name / scope,
+                    horizon=sequence_horizon,
+                    history_length=int(detector_cfg["history_length"]),
+                    prediction_horizon=int(detector_cfg["prediction_horizon"]),
+                    tree_max_depth=int(detector_cfg["decision_tree_max_depth"]),
+                    tree_min_leaf=int(detector_cfg["decision_tree_min_samples_leaf"]),
+                )
             )
-            train_students_for_experiment(
-                experiment_dir=exp_dir,
-                scope=scope,
-                teacher_predictions_path=teacher_dir / "teacher_predictions.csv",
-                output_dir=students_root / exp_dir.name / scope,
-                horizon=int(dataset_cfg["horizon"]),
-                history_length=int(dataset_cfg["history_length"]),
-                blend_alpha=float(config["student"]["blend_alpha"]),
-                tree_max_depth=int(config["student"]["decision_tree_max_depth"]),
-                tree_min_leaf=int(config["student"]["decision_tree_min_samples_leaf"]),
-                run_length_buckets=[int(item) for item in config["student"]["run_length_buckets"]],
-                synthetic_examples_per_family=int(config["student"].get("synthetic_examples_per_family", 0)),
-                synthetic_mutation_rate=float(config["student"].get("synthetic_mutation_rate", 0.05)),
-                seed=int(config["random_seed"]),
-            )
-
-    eval_root.mkdir(parents=True, exist_ok=True)
-    family_rows: list[dict[str, str]] = []
-    tuple_rows: list[dict[str, str]] = []
-    hw_rows: list[dict[str, str]] = []
-    for exp_dir in experiment_dirs(sequences_root):
-        for scope in scopes_for_experiment(exp_dir):
-            stage_dir = eval_root / exp_dir.name / scope
-            evaluate_outputs(
-                teacher_predictions=teacher_root / exp_dir.name / scope / "teacher_predictions.csv",
-                student_predictions=students_root / exp_dir.name / scope / "student_predictions.csv",
-                student_summary=students_root / exp_dir.name / scope / "student_summary.csv",
-                ablation_results=ablation_root / "family_ablation_results.csv",
-                output_dir=stage_dir,
-            )
-            for row in load_csv_rows(stage_dir / "family_teacher_student_comparison.csv"):
-                row["experiment"] = exp_dir.name
-                row["scope"] = scope
-                family_rows.append(row)
-            for row in load_csv_rows(stage_dir / "tuple_phase_prediction_results.csv"):
-                row["experiment"] = exp_dir.name
-                row["scope"] = scope
-                tuple_rows.append(row)
-            for row in load_csv_rows(stage_dir / "hardware_cost_summary.csv"):
-                row["experiment"] = exp_dir.name
-                row["scope"] = scope
-                hw_rows.append(row)
-
-    write_csv_rows(eval_root / "family_teacher_student_comparison.csv", family_rows)
-    write_csv_rows(eval_root / "tuple_phase_prediction_results.csv", tuple_rows)
-    write_csv_rows(eval_root / "hardware_cost_summary.csv", hw_rows)
-    write_csv_rows(eval_root / "family_ablation_results.csv", load_csv_rows(ablation_root / "family_ablation_results.csv"))
+            if sweep_depths:
+                detector_sweep_rows.extend(
+                    run_phase_detector_depth_sweep_for_experiment(
+                        experiment_dir=exp_dir,
+                        scope=scope,
+                        output_dir=detector_root / exp_dir.name / scope,
+                        horizon=sequence_horizon,
+                        history_length=int(detector_cfg["history_length"]),
+                        prediction_horizon=int(detector_cfg["prediction_horizon"]),
+                        tree_depths=sweep_depths,
+                        tree_min_leaf=int(detector_cfg["decision_tree_min_samples_leaf"]),
+                    )
+                )
+    write_csv_rows(detector_root / "phase_detector_summary_all.csv", detector_rows)
+    if detector_sweep_rows:
+        write_csv_rows(detector_root / "phase_detector_depth_sweep_summary_all.csv", detector_sweep_rows)
 
     summary = {
         "ablation_rows": len(ablation_rows),
-        "family_metrics": len(family_rows),
-        "tuple_metrics": len(tuple_rows),
-        "hardware_rows": len(hw_rows),
+        "phase_detector_rows": len(detector_rows),
+        "phase_detector_sweep_rows": len(detector_sweep_rows),
     }
     print(
-        f"Pipeline complete: ablation={summary['ablation_rows']} family_metrics={summary['family_metrics']} "
-        f"tuple_metrics={summary['tuple_metrics']} hardware_rows={summary['hardware_rows']}"
+        f"Pipeline complete: ablation={summary['ablation_rows']} "
+        f"phase_detector_rows={summary['phase_detector_rows']} "
+        f"phase_detector_sweep_rows={summary['phase_detector_sweep_rows']}"
     )
     return summary
 
@@ -163,10 +134,9 @@ def main() -> None:
     parser.add_argument("--output-dir", default="")
     parser.add_argument("--experiment-mode", choices=["per_workload_holdout", "pooled_run_group", "config_group_holdout", "leave_one_workload_out", "all"], default="")
     parser.add_argument("--threshold-mode", choices=["global", "per_workload", "both"], default="")
-    parser.add_argument("--full", action="store_true")
     args = parser.parse_args()
 
-    config = apply_runtime_profile(load_config(args.config or None), full=args.full)
+    config = load_config(args.config or None)
     dataset_cfg = config["dataset"]
     run_pipeline_for_dataset(
         input_csv=Path(args.input or dataset_cfg["input_csv"]),

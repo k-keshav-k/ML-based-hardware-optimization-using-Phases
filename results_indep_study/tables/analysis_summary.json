@@ -1,0 +1,634 @@
+{
+  "recommendations_path": "/home/kk6081/res/results/tables/recommendations.csv",
+  "views": {
+    "derived": {
+      "columns": [
+        "metric__cpi",
+        "metric__ipc",
+        "metric__branch_mpki",
+        "metric__branch_per_ki",
+        "metric__llc_mpki",
+        "metric__offcore_read_mpki"
+      ],
+      "csv_path": "/home/kk6081/res/results/processed/preprocessed/derived_winsorized.csv",
+      "groups": {
+        "0.70": [
+          [
+            "metric__cpi",
+            "metric__ipc",
+            "metric__llc_mpki"
+          ]
+        ],
+        "0.80": [
+          [
+            "metric__cpi",
+            "metric__ipc"
+          ]
+        ],
+        "0.90": [
+          [
+            "metric__cpi",
+            "metric__ipc"
+          ]
+        ]
+      },
+      "indicator_count": 6,
+      "ordered_columns": [
+        "metric__branch_per_ki",
+        "metric__llc_mpki",
+        "metric__cpi",
+        "metric__ipc",
+        "metric__branch_mpki",
+        "metric__offcore_read_mpki"
+      ],
+      "phase_groups": [],
+      "plots": {
+        "clustered": "tables/derived/clustered_heatmap.png",
+        "dendrogram": "tables/derived/dendrogram.png",
+        "pearson": "tables/derived/pearson_heatmap.png",
+        "spearman": "tables/derived/spearman_heatmap.png",
+        "top_correlations": "tables/derived/top_correlations.png",
+        "vif": "tables/derived/vif.png"
+      },
+      "row_count": 9306,
+      "thread_groups": [
+        "1",
+        "2",
+        "4",
+        "8"
+      ],
+      "top_pairs": [
+        {
+          "abs_correlation": 1.0,
+          "correlation": -1.0,
+          "indicator_a": "metric__cpi",
+          "indicator_b": "metric__ipc",
+          "method": "spearman"
+        },
+        {
+          "abs_correlation": 0.8857142857142858,
+          "correlation": 0.8857142857142858,
+          "indicator_a": "metric__cpi",
+          "indicator_b": "metric__llc_mpki",
+          "method": "spearman"
+        },
+        {
+          "abs_correlation": 0.8857142857142858,
+          "correlation": -0.8857142857142858,
+          "indicator_a": "metric__ipc",
+          "indicator_b": "metric__llc_mpki",
+          "method": "spearman"
+        },
+        {
+          "abs_correlation": 0.8857142857142858,
+          "correlation": 0.8857142857142858,
+          "indicator_a": "metric__branch_mpki",
+          "indicator_b": "metric__offcore_read_mpki",
+          "method": "spearman"
+        },
+        {
+          "abs_correlation": 0.5428571428571429,
+          "correlation": 0.5428571428571429,
+          "indicator_a": "metric__cpi",
+          "indicator_b": "metric__offcore_read_mpki",
+          "method": "spearman"
+        },
+        {
+          "abs_correlation": 0.5428571428571429,
+          "correlation": -0.5428571428571429,
+          "indicator_a": "metric__ipc",
+          "indicator_b": "metric__offcore_read_mpki",
+          "method": "spearman"
+        },
+        {
+          "abs_correlation": 0.3142857142857143,
+          "correlation": 0.3142857142857143,
+          "indicator_a": "metric__cpi",
+          "indicator_b": "metric__branch_mpki",
+          "method": "spearman"
+        },
+        {
+          "abs_correlation": 0.3142857142857143,
+          "correlation": -0.3142857142857143,
+          "indicator_a": "metric__ipc",
+          "indicator_b": "metric__branch_mpki",
+          "method": "spearman"
+        },
+        {
+          "abs_correlation": 0.3142857142857143,
+          "correlation": 0.3142857142857143,
+          "indicator_a": "metric__branch_mpki",
+          "indicator_b": "metric__branch_per_ki",
+          "method": "spearman"
+        },
+        {
+          "abs_correlation": 0.3142857142857143,
+          "correlation": 0.3142857142857143,
+          "indicator_a": "metric__llc_mpki",
+          "indicator_b": "metric__offcore_read_mpki",
+          "method": "spearman"
+        },
+        {
+          "abs_correlation": 0.2571428571428572,
+          "correlation": 0.2571428571428572,
+          "indicator_a": "metric__cpi",
+          "indicator_b": "metric__branch_per_ki",
+          "method": "spearman"
+        },
+        {
+          "abs_correlation": 0.2571428571428572,
+          "correlation": -0.2571428571428572,
+          "indicator_a": "metric__ipc",
+          "indicator_b": "metric__branch_per_ki",
+          "method": "spearman"
+        },
+        {
+          "abs_correlation": 0.2571428571428572,
+          "correlation": 0.2571428571428572,
+          "indicator_a": "metric__branch_per_ki",
+          "indicator_b": "metric__llc_mpki",
+          "method": "spearman"
+        },
+        {
+          "abs_correlation": 0.028571428571428574,
+          "correlation": 0.028571428571428574,
+          "indicator_a": "metric__branch_mpki",
+          "indicator_b": "metric__llc_mpki",
+          "method": "spearman"
+        },
+        {
+          "abs_correlation": 0.028571428571428574,
+          "correlation": 0.028571428571428574,
+          "indicator_a": "metric__branch_per_ki",
+          "indicator_b": "metric__offcore_read_mpki",
+          "method": "spearman"
+        }
+      ],
+      "view_name": "derived",
+      "workload_groups": [
+        "blackscholes",
+        "bodytrack",
+        "canneal",
+        "fluidanimate",
+        "freqmine"
+      ]
+    },
+    "normalized": {
+      "columns": [
+        "norm__instructions_retired_per_ms",
+        "norm__cycles_per_ms",
+        "norm__branch_instructions_per_ki",
+        "norm__branch_mispredictions_per_ki",
+        "norm__l1d_loads_per_ki",
+        "norm__l1d_stores_per_ki",
+        "norm__llc_references_per_ki",
+        "norm__llc_misses_per_ki",
+        "norm__offcore_demand_data_reads_per_ki",
+        "norm__resource_stalls_per_ki"
+      ],
+      "csv_path": "/home/kk6081/res/results/processed/preprocessed/normalized_winsorized.csv",
+      "groups": {
+        "0.70": [
+          [
+            "norm__cycles_per_ms",
+            "norm__instructions_retired_per_ms"
+          ],
+          [
+            "norm__llc_references_per_ki",
+            "norm__offcore_demand_data_reads_per_ki"
+          ],
+          [
+            "norm__llc_misses_per_ki",
+            "norm__resource_stalls_per_ki"
+          ]
+        ],
+        "0.80": [
+          [
+            "norm__cycles_per_ms",
+            "norm__instructions_retired_per_ms"
+          ],
+          [
+            "norm__llc_references_per_ki",
+            "norm__offcore_demand_data_reads_per_ki"
+          ]
+        ],
+        "0.90": []
+      },
+      "indicator_count": 10,
+      "ordered_columns": [
+        "norm__branch_mispredictions_per_ki",
+        "norm__llc_references_per_ki",
+        "norm__offcore_demand_data_reads_per_ki",
+        "norm__l1d_loads_per_ki",
+        "norm__l1d_stores_per_ki",
+        "norm__llc_misses_per_ki",
+        "norm__resource_stalls_per_ki",
+        "norm__branch_instructions_per_ki",
+        "norm__instructions_retired_per_ms",
+        "norm__cycles_per_ms"
+      ],
+      "phase_groups": [],
+      "plots": {
+        "clustered": "tables/normalized/clustered_heatmap.png",
+        "dendrogram": "tables/normalized/dendrogram.png",
+        "pearson": "tables/normalized/pearson_heatmap.png",
+        "spearman": "tables/normalized/spearman_heatmap.png",
+        "top_correlations": "tables/normalized/top_correlations.png",
+        "vif": "tables/normalized/vif.png"
+      },
+      "row_count": 9306,
+      "thread_groups": [
+        "1",
+        "2",
+        "4",
+        "8"
+      ],
+      "top_pairs": [
+        {
+          "abs_correlation": 0.9757575757575757,
+          "correlation": 0.9757575757575757,
+          "indicator_a": "norm__instructions_retired_per_ms",
+          "indicator_b": "norm__cycles_per_ms",
+          "method": "spearman"
+        },
+        {
+          "abs_correlation": 0.9757575757575757,
+          "correlation": 0.9757575757575757,
+          "indicator_a": "norm__llc_references_per_ki",
+          "indicator_b": "norm__offcore_demand_data_reads_per_ki",
+          "method": "spearman"
+        },
+        {
+          "abs_correlation": 0.9515151515151514,
+          "correlation": -0.9515151515151514,
+          "indicator_a": "norm__instructions_retired_per_ms",
+          "indicator_b": "norm__branch_instructions_per_ki",
+          "method": "spearman"
+        },
+        {
+          "abs_correlation": 0.9515151515151514,
+          "correlation": -0.9515151515151514,
+          "indicator_a": "norm__cycles_per_ms",
+          "indicator_b": "norm__branch_instructions_per_ki",
+          "method": "spearman"
+        },
+        {
+          "abs_correlation": 0.9272727272727272,
+          "correlation": 0.9272727272727272,
+          "indicator_a": "norm__branch_mispredictions_per_ki",
+          "indicator_b": "norm__llc_references_per_ki",
+          "method": "spearman"
+        },
+        {
+          "abs_correlation": 0.8787878787878788,
+          "correlation": 0.8787878787878788,
+          "indicator_a": "norm__branch_mispredictions_per_ki",
+          "indicator_b": "norm__offcore_demand_data_reads_per_ki",
+          "method": "spearman"
+        },
+        {
+          "abs_correlation": 0.8181818181818182,
+          "correlation": -0.8181818181818182,
+          "indicator_a": "norm__cycles_per_ms",
+          "indicator_b": "norm__branch_mispredictions_per_ki",
+          "method": "spearman"
+        },
+        {
+          "abs_correlation": 0.8060606060606059,
+          "correlation": -0.8060606060606059,
+          "indicator_a": "norm__instructions_retired_per_ms",
+          "indicator_b": "norm__branch_mispredictions_per_ki",
+          "method": "spearman"
+        },
+        {
+          "abs_correlation": 0.7696969696969697,
+          "correlation": 0.7696969696969697,
+          "indicator_a": "norm__l1d_loads_per_ki",
+          "indicator_b": "norm__l1d_stores_per_ki",
+          "method": "spearman"
+        },
+        {
+          "abs_correlation": 0.7212121212121211,
+          "correlation": 0.7212121212121211,
+          "indicator_a": "norm__branch_instructions_per_ki",
+          "indicator_b": "norm__branch_mispredictions_per_ki",
+          "method": "spearman"
+        },
+        {
+          "abs_correlation": 0.6848484848484848,
+          "correlation": 0.6848484848484848,
+          "indicator_a": "norm__cycles_per_ms",
+          "indicator_b": "norm__resource_stalls_per_ki",
+          "method": "spearman"
+        },
+        {
+          "abs_correlation": 0.6848484848484848,
+          "correlation": -0.6848484848484848,
+          "indicator_a": "norm__branch_mispredictions_per_ki",
+          "indicator_b": "norm__resource_stalls_per_ki",
+          "method": "spearman"
+        },
+        {
+          "abs_correlation": 0.6727272727272726,
+          "correlation": 0.6727272727272726,
+          "indicator_a": "norm__l1d_loads_per_ki",
+          "indicator_b": "norm__offcore_demand_data_reads_per_ki",
+          "method": "spearman"
+        },
+        {
+          "abs_correlation": 0.6606060606060605,
+          "correlation": -0.6606060606060605,
+          "indicator_a": "norm__cycles_per_ms",
+          "indicator_b": "norm__llc_references_per_ki",
+          "method": "spearman"
+        },
+        {
+          "abs_correlation": 0.6606060606060605,
+          "correlation": 0.6606060606060605,
+          "indicator_a": "norm__l1d_loads_per_ki",
+          "indicator_b": "norm__llc_references_per_ki",
+          "method": "spearman"
+        },
+        {
+          "abs_correlation": 0.6363636363636362,
+          "correlation": -0.6363636363636362,
+          "indicator_a": "norm__instructions_retired_per_ms",
+          "indicator_b": "norm__llc_references_per_ki",
+          "method": "spearman"
+        },
+        {
+          "abs_correlation": 0.6,
+          "correlation": 0.6,
+          "indicator_a": "norm__instructions_retired_per_ms",
+          "indicator_b": "norm__resource_stalls_per_ki",
+          "method": "spearman"
+        },
+        {
+          "abs_correlation": 0.5878787878787878,
+          "correlation": -0.5878787878787878,
+          "indicator_a": "norm__l1d_stores_per_ki",
+          "indicator_b": "norm__llc_misses_per_ki",
+          "method": "spearman"
+        },
+        {
+          "abs_correlation": 0.5757575757575757,
+          "correlation": 0.5757575757575757,
+          "indicator_a": "norm__branch_mispredictions_per_ki",
+          "indicator_b": "norm__l1d_loads_per_ki",
+          "method": "spearman"
+        },
+        {
+          "abs_correlation": 0.5636363636363636,
+          "correlation": -0.5636363636363636,
+          "indicator_a": "norm__cycles_per_ms",
+          "indicator_b": "norm__offcore_demand_data_reads_per_ki",
+          "method": "spearman"
+        }
+      ],
+      "view_name": "normalized",
+      "workload_groups": [
+        "blackscholes",
+        "bodytrack",
+        "canneal",
+        "fluidanimate",
+        "freqmine"
+      ]
+    },
+    "raw": {
+      "columns": [
+        "counter__instructions_retired",
+        "counter__cycles",
+        "counter__branch_instructions",
+        "counter__branch_mispredictions",
+        "counter__l1d_loads",
+        "counter__l1d_stores",
+        "counter__llc_references",
+        "counter__llc_misses",
+        "counter__offcore_demand_data_reads",
+        "counter__resource_stalls"
+      ],
+      "csv_path": "/home/kk6081/res/results/processed/preprocessed/raw_winsorized.csv",
+      "groups": {
+        "0.70": [
+          [
+            "counter__branch_instructions",
+            "counter__branch_mispredictions",
+            "counter__cycles",
+            "counter__instructions_retired",
+            "counter__l1d_loads",
+            "counter__l1d_stores",
+            "counter__llc_misses",
+            "counter__llc_references",
+            "counter__offcore_demand_data_reads",
+            "counter__resource_stalls"
+          ]
+        ],
+        "0.80": [
+          [
+            "counter__branch_instructions",
+            "counter__branch_mispredictions",
+            "counter__cycles",
+            "counter__instructions_retired",
+            "counter__l1d_loads",
+            "counter__l1d_stores",
+            "counter__llc_references",
+            "counter__offcore_demand_data_reads",
+            "counter__resource_stalls"
+          ]
+        ],
+        "0.90": [
+          [
+            "counter__branch_instructions",
+            "counter__cycles",
+            "counter__instructions_retired",
+            "counter__l1d_loads",
+            "counter__l1d_stores"
+          ],
+          [
+            "counter__llc_references",
+            "counter__offcore_demand_data_reads"
+          ]
+        ]
+      },
+      "indicator_count": 10,
+      "ordered_columns": [
+        "counter__llc_misses",
+        "counter__resource_stalls",
+        "counter__cycles",
+        "counter__l1d_stores",
+        "counter__branch_instructions",
+        "counter__instructions_retired",
+        "counter__l1d_loads",
+        "counter__branch_mispredictions",
+        "counter__llc_references",
+        "counter__offcore_demand_data_reads"
+      ],
+      "phase_groups": [],
+      "plots": {
+        "clustered": "tables/raw/clustered_heatmap.png",
+        "dendrogram": "tables/raw/dendrogram.png",
+        "pearson": "tables/raw/pearson_heatmap.png",
+        "spearman": "tables/raw/spearman_heatmap.png",
+        "top_correlations": "tables/raw/top_correlations.png",
+        "vif": "tables/raw/vif.png"
+      },
+      "row_count": 9409,
+      "thread_groups": [
+        "1",
+        "2",
+        "4",
+        "8"
+      ],
+      "top_pairs": [
+        {
+          "abs_correlation": 0.9757575757575757,
+          "correlation": 0.9757575757575757,
+          "indicator_a": "counter__instructions_retired",
+          "indicator_b": "counter__l1d_loads",
+          "method": "spearman"
+        },
+        {
+          "abs_correlation": 0.9757575757575757,
+          "correlation": 0.9757575757575757,
+          "indicator_a": "counter__llc_references",
+          "indicator_b": "counter__offcore_demand_data_reads",
+          "method": "spearman"
+        },
+        {
+          "abs_correlation": 0.9636363636363635,
+          "correlation": 0.9636363636363635,
+          "indicator_a": "counter__instructions_retired",
+          "indicator_b": "counter__branch_instructions",
+          "method": "spearman"
+        },
+        {
+          "abs_correlation": 0.9393939393939393,
+          "correlation": 0.9393939393939393,
+          "indicator_a": "counter__branch_instructions",
+          "indicator_b": "counter__l1d_loads",
+          "method": "spearman"
+        },
+        {
+          "abs_correlation": 0.9272727272727272,
+          "correlation": -0.9272727272727272,
+          "indicator_a": "counter__branch_mispredictions",
+          "indicator_b": "counter__resource_stalls",
+          "method": "spearman"
+        },
+        {
+          "abs_correlation": 0.9151515151515152,
+          "correlation": 0.9151515151515152,
+          "indicator_a": "counter__instructions_retired",
+          "indicator_b": "counter__l1d_stores",
+          "method": "spearman"
+        },
+        {
+          "abs_correlation": 0.9151515151515152,
+          "correlation": 0.9151515151515152,
+          "indicator_a": "counter__l1d_loads",
+          "indicator_b": "counter__l1d_stores",
+          "method": "spearman"
+        },
+        {
+          "abs_correlation": 0.8909090909090909,
+          "correlation": -0.8909090909090909,
+          "indicator_a": "counter__l1d_stores",
+          "indicator_b": "counter__llc_misses",
+          "method": "spearman"
+        },
+        {
+          "abs_correlation": 0.8787878787878788,
+          "correlation": 0.8787878787878788,
+          "indicator_a": "counter__branch_instructions",
+          "indicator_b": "counter__l1d_stores",
+          "method": "spearman"
+        },
+        {
+          "abs_correlation": 0.8787878787878788,
+          "correlation": 0.8787878787878788,
+          "indicator_a": "counter__branch_mispredictions",
+          "indicator_b": "counter__llc_references",
+          "method": "spearman"
+        },
+        {
+          "abs_correlation": 0.8181818181818182,
+          "correlation": -0.8181818181818182,
+          "indicator_a": "counter__instructions_retired",
+          "indicator_b": "counter__llc_misses",
+          "method": "spearman"
+        },
+        {
+          "abs_correlation": 0.8181818181818182,
+          "correlation": 0.8181818181818182,
+          "indicator_a": "counter__branch_mispredictions",
+          "indicator_b": "counter__offcore_demand_data_reads",
+          "method": "spearman"
+        },
+        {
+          "abs_correlation": 0.7939393939393938,
+          "correlation": -0.7939393939393938,
+          "indicator_a": "counter__l1d_loads",
+          "indicator_b": "counter__llc_misses",
+          "method": "spearman"
+        },
+        {
+          "abs_correlation": 0.7818181818181817,
+          "correlation": 0.7818181818181817,
+          "indicator_a": "counter__cycles",
+          "indicator_b": "counter__l1d_loads",
+          "method": "spearman"
+        },
+        {
+          "abs_correlation": 0.7696969696969697,
+          "correlation": -0.7696969696969697,
+          "indicator_a": "counter__llc_references",
+          "indicator_b": "counter__resource_stalls",
+          "method": "spearman"
+        },
+        {
+          "abs_correlation": 0.7575757575757575,
+          "correlation": -0.7575757575757575,
+          "indicator_a": "counter__branch_instructions",
+          "indicator_b": "counter__llc_misses",
+          "method": "spearman"
+        },
+        {
+          "abs_correlation": 0.7333333333333332,
+          "correlation": 0.7333333333333332,
+          "indicator_a": "counter__instructions_retired",
+          "indicator_b": "counter__cycles",
+          "method": "spearman"
+        },
+        {
+          "abs_correlation": 0.7333333333333332,
+          "correlation": 0.7333333333333332,
+          "indicator_a": "counter__cycles",
+          "indicator_b": "counter__branch_instructions",
+          "method": "spearman"
+        },
+        {
+          "abs_correlation": 0.6969696969696969,
+          "correlation": -0.6969696969696969,
+          "indicator_a": "counter__offcore_demand_data_reads",
+          "indicator_b": "counter__resource_stalls",
+          "method": "spearman"
+        },
+        {
+          "abs_correlation": 0.6848484848484848,
+          "correlation": 0.6848484848484848,
+          "indicator_a": "counter__cycles",
+          "indicator_b": "counter__l1d_stores",
+          "method": "spearman"
+        }
+      ],
+      "view_name": "raw",
+      "workload_groups": [
+        "blackscholes",
+        "bodytrack",
+        "canneal",
+        "fluidanimate",
+        "freqmine"
+      ]
+    }
+  }
+}

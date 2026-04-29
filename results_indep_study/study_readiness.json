@@ -1,0 +1,31 @@
+{
+  "missing_required_confident_families": [],
+  "raw_confident_families": [
+    "branch_instructions",
+    "branch_mispredictions",
+    "cycles",
+    "instructions_retired",
+    "l1d_loads",
+    "l1d_stores",
+    "llc_misses",
+    "llc_references",
+    "offcore_demand_data_reads",
+    "resource_stalls"
+  ],
+  "strict_hardware_study_reason": "",
+  "study_ready": true,
+  "study_ready_core": true,
+  "study_ready_uncore": false,
+  "uncore_devices_present": true,
+  "uncore_imc_devices": [
+    "uncore_imc_0",
+    "uncore_imc_1",
+    "uncore_imc_2",
+    "uncore_imc_3"
+  ],
+  "uncore_policy_blocked": true,
+  "uncore_probe_event": "uncore_imc_0/cas_count_read/",
+  "uncore_probe_output": "",
+  "uncore_probe_returncode": 0,
+  "uncore_reason": "System-wide perf is blocked on this host. perf_event_paranoid=2; lower it or grant perf capability for uncore collection."
+}

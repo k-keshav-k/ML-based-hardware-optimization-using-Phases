@@ -1,0 +1,172 @@
+{
+  "columns": [
+    "metric__cpi",
+    "metric__ipc",
+    "metric__branch_mpki",
+    "metric__branch_per_ki",
+    "metric__llc_mpki",
+    "metric__offcore_read_mpki"
+  ],
+  "csv_path": "/home/kk6081/res/results/processed/preprocessed/derived_winsorized.csv",
+  "groups": {
+    "0.70": [
+      [
+        "metric__cpi",
+        "metric__ipc",
+        "metric__llc_mpki"
+      ]
+    ],
+    "0.80": [
+      [
+        "metric__cpi",
+        "metric__ipc"
+      ]
+    ],
+    "0.90": [
+      [
+        "metric__cpi",
+        "metric__ipc"
+      ]
+    ]
+  },
+  "indicator_count": 6,
+  "ordered_columns": [
+    "metric__branch_per_ki",
+    "metric__llc_mpki",
+    "metric__cpi",
+    "metric__ipc",
+    "metric__branch_mpki",
+    "metric__offcore_read_mpki"
+  ],
+  "phase_groups": [],
+  "plots": {
+    "clustered": "tables/derived/clustered_heatmap.png",
+    "dendrogram": "tables/derived/dendrogram.png",
+    "pearson": "tables/derived/pearson_heatmap.png",
+    "spearman": "tables/derived/spearman_heatmap.png",
+    "top_correlations": "tables/derived/top_correlations.png",
+    "vif": "tables/derived/vif.png"
+  },
+  "row_count": 9306,
+  "thread_groups": [
+    "1",
+    "2",
+    "4",
+    "8"
+  ],
+  "top_pairs": [
+    {
+      "abs_correlation": 1.0,
+      "correlation": -1.0,
+      "indicator_a": "metric__cpi",
+      "indicator_b": "metric__ipc",
+      "method": "spearman"
+    },
+    {
+      "abs_correlation": 0.8857142857142858,
+      "correlation": 0.8857142857142858,
+      "indicator_a": "metric__cpi",
+      "indicator_b": "metric__llc_mpki",
+      "method": "spearman"
+    },
+    {
+      "abs_correlation": 0.8857142857142858,
+      "correlation": -0.8857142857142858,
+      "indicator_a": "metric__ipc",
+      "indicator_b": "metric__llc_mpki",
+      "method": "spearman"
+    },
+    {
+      "abs_correlation": 0.8857142857142858,
+      "correlation": 0.8857142857142858,
+      "indicator_a": "metric__branch_mpki",
+      "indicator_b": "metric__offcore_read_mpki",
+      "method": "spearman"
+    },
+    {
+      "abs_correlation": 0.5428571428571429,
+      "correlation": 0.5428571428571429,
+      "indicator_a": "metric__cpi",
+      "indicator_b": "metric__offcore_read_mpki",
+      "method": "spearman"
+    },
+    {
+      "abs_correlation": 0.5428571428571429,
+      "correlation": -0.5428571428571429,
+      "indicator_a": "metric__ipc",
+      "indicator_b": "metric__offcore_read_mpki",
+      "method": "spearman"
+    },
+    {
+      "abs_correlation": 0.3142857142857143,
+      "correlation": 0.3142857142857143,
+      "indicator_a": "metric__cpi",
+      "indicator_b": "metric__branch_mpki",
+      "method": "spearman"
+    },
+    {
+      "abs_correlation": 0.3142857142857143,
+      "correlation": -0.3142857142857143,
+      "indicator_a": "metric__ipc",
+      "indicator_b": "metric__branch_mpki",
+      "method": "spearman"
+    },
+    {
+      "abs_correlation": 0.3142857142857143,
+      "correlation": 0.3142857142857143,
+      "indicator_a": "metric__branch_mpki",
+      "indicator_b": "metric__branch_per_ki",
+      "method": "spearman"
+    },
+    {
+      "abs_correlation": 0.3142857142857143,
+      "correlation": 0.3142857142857143,
+      "indicator_a": "metric__llc_mpki",
+      "indicator_b": "metric__offcore_read_mpki",
+      "method": "spearman"
+    },
+    {
+      "abs_correlation": 0.2571428571428572,
+      "correlation": 0.2571428571428572,
+      "indicator_a": "metric__cpi",
+      "indicator_b": "metric__branch_per_ki",
+      "method": "spearman"
+    },
+    {
+      "abs_correlation": 0.2571428571428572,
+      "correlation": -0.2571428571428572,
+      "indicator_a": "metric__ipc",
+      "indicator_b": "metric__branch_per_ki",
+      "method": "spearman"
+    },
+    {
+      "abs_correlation": 0.2571428571428572,
+      "correlation": 0.2571428571428572,
+      "indicator_a": "metric__branch_per_ki",
+      "indicator_b": "metric__llc_mpki",
+      "method": "spearman"
+    },
+    {
+      "abs_correlation": 0.028571428571428574,
+      "correlation": 0.028571428571428574,
+      "indicator_a": "metric__branch_mpki",
+      "indicator_b": "metric__llc_mpki",
+      "method": "spearman"
+    },
+    {
+      "abs_correlation": 0.028571428571428574,
+      "correlation": 0.028571428571428574,
+      "indicator_a": "metric__branch_per_ki",
+      "indicator_b": "metric__offcore_read_mpki",
+      "method": "spearman"
+    }
+  ],
+  "view_name": "derived",
+  "workload_groups": [
+    "blackscholes",
+    "bodytrack",
+    "canneal",
+    "fluidanimate",
+    "freqmine"
+  ]
+}

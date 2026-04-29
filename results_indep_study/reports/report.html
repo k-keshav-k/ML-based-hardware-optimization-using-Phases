@@ -1,0 +1,274 @@
+<html><head><meta charset='utf-8'><style>
+body { font-family: Georgia, 'Times New Roman', serif; margin: 1.5rem auto; max-width: 1100px; color: #1f2933; line-height: 1.6; }
+h1, h2, h3 { color: #102a43; }
+table { border-collapse: collapse; width: 100%; margin: 1rem 0 1.5rem; table-layout: fixed; }
+th, td { border: 1px solid #d9e2ec; padding: 0.4rem 0.55rem; text-align: left; vertical-align: top; overflow-wrap: anywhere; font-size: 0.94rem; }
+th { background: #f0f4f8; }
+img { max-width: 100%; border: 1px solid #d9e2ec; margin: 1rem 0; }
+code { background: #f0f4f8; padding: 0.1rem 0.3rem; }
+</style></head><body><h1>Multicore Hardware Counter Correlation Study</h1>
+<h2>Executive Summary</h2>
+<p>This project collects Linux performance-counter measurements, aligns them with workload metadata and, when available, synthetic phase labels, and studies correlation structure to identify redundant indicators. The main recommendation workflow prefers the normalized Spearman view because raw counters often correlate simply because total activity rose across a sample, not because two indicators capture the same underlying behavior. On this machine, the generated artifact is based on PARSEC workloads collected through <code>parsecmgmt</code>.</p>
+<h2>Objective</h2>
+<p>Determine which hardware indicators are highly correlated or redundant so a later phase-classification and phase-prediction pipeline can rely on a smaller, cheaper, and more portable counter set.</p>
+<h2>Experimental Setup</h2>
+<ul>
+<li>CPU vendor/model: <code>GenuineIntel</code> / <code>Intel(R) Xeon(R) CPU E5-2680 v2 @ 2.80GHz</code></li>
+<li>Architecture: <code>x86_64</code></li>
+<li>Logical CPUs: <code>20</code></li>
+<li>Sockets: <code>2</code></li>
+<li>Cores per socket: <code>10</code></li>
+<li>Perf version: <code>perf version 5.14.0-611.47.1.el9_7.x86_64</code></li>
+<li>Intel PCM available: <code>False</code></li>
+<li>CPU family/model id: <code>6</code> / <code>62</code></li>
+<li>Strict core PMU study ready: <code>True</code></li>
+<li>Uncore IMC study ready: <code>False</code></li>
+</ul>
+<h2>Workload Generation</h2>
+<ul>
+<li>Suites in this generated artifact: <code>parsec</code>.</li>
+<li>PARSEC available on this host: <code>True</code>. SPEC CPU2017 available on this host: <code>False</code>.</li>
+<li>Workloads executed: <code>blackscholes, bodytrack, canneal, fluidanimate, freqmine</code>.</li>
+<li>Thread counts executed: <code>1, 2, 4, 8</code>.</li>
+<li>Repetitions per workload/thread combination: <code>3</code>.</li>
+<li>Target collection interval: <code>10 ms</code>.</li>
+<li>PARSEC input sizes used: <code>test</code>.</li>
+<li>Observed perf-wrapped interval collection wall time: <code>1594.8 ms median (1193.0 min, 2550.9 max)</code>.</li>
+<li>Affinity policy: Pinned with <code>taskset</code> to the first N online CPUs for the requested thread count.</li>
+<li><code>parsec</code> workload generation: standard PARSEC applications and kernels launched through <code>parsecmgmt</code> with taskset-based CPU affinity and the configured PARSEC input set.</li>
+</ul>
+<h2>Event Mapping Table</h2>
+<table>
+<thead>
+<tr>
+<th>Family</th>
+<th>Selected Event</th>
+<th>Supported</th>
+<th>Note</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Branch instructions</td>
+<td>br_inst_retired.all_branches</td>
+<td>Yes</td>
+<td>Using preferred host event</td>
+</tr>
+<tr>
+<td>Branch mispredictions</td>
+<td>br_misp_retired.all_branches</td>
+<td>Yes</td>
+<td>Using preferred host event</td>
+</tr>
+<tr>
+<td>Cycles</td>
+<td>cpu_clk_unhalted.thread</td>
+<td>Yes</td>
+<td>Using preferred host event</td>
+</tr>
+<tr>
+<td>Instructions retired</td>
+<td>inst_retired.any</td>
+<td>Yes</td>
+<td>Using preferred host event</td>
+</tr>
+<tr>
+<td>L1 data loads</td>
+<td>mem_uops_retired.all_loads</td>
+<td>Yes</td>
+<td>Using preferred host event</td>
+</tr>
+<tr>
+<td>L1 data stores</td>
+<td>mem_uops_retired.all_stores</td>
+<td>Yes</td>
+<td>Using preferred host event</td>
+</tr>
+<tr>
+<td>LLC misses</td>
+<td>longest_lat_cache.miss</td>
+<td>Yes</td>
+<td>Using preferred host event</td>
+</tr>
+<tr>
+<td>LLC references</td>
+<td>longest_lat_cache.reference</td>
+<td>Yes</td>
+<td>Using preferred host event</td>
+</tr>
+<tr>
+<td>Memory read bandwidth</td>
+<td>uncore_imc/cas_count_read/</td>
+<td>Yes</td>
+<td>Preferred Intel uncore IMC event (system-wide)</td>
+</tr>
+<tr>
+<td>Memory write bandwidth</td>
+<td>uncore_imc/cas_count_write/</td>
+<td>Yes</td>
+<td>Preferred Intel uncore IMC event (system-wide)</td>
+</tr>
+<tr>
+<td>Off-core / DRAM demand reads</td>
+<td>offcore_requests.demand_data_rd</td>
+<td>Yes</td>
+<td>Using preferred host event</td>
+</tr>
+<tr>
+<td>Resource stalls</td>
+<td>resource_stalls.any</td>
+<td>Yes</td>
+<td>Using preferred host event</td>
+</tr>
+<tr>
+<td>Total memory bandwidth</td>
+<td>derived_total_memory_bandwidth</td>
+<td>Yes</td>
+<td>Derived from system-wide Intel uncore IMC read+write</td>
+</tr>
+</tbody>
+</table>
+<ul>
+<li>Confident counters retained for analysis: <code>Branch instructions, Branch mispredictions, Cycles, Instructions retired, L1 data loads, L1 data stores, LLC misses, LLC references, Off-core / DRAM demand reads, Resource stalls</code>.</li>
+<li>Confident counters exposed on this host: <code>Branch instructions, Branch mispredictions, Cycles, Instructions retired, L1 data loads, L1 data stores, LLC misses, LLC references, Memory read bandwidth, Memory write bandwidth, Off-core / DRAM demand reads, Resource stalls, Total memory bandwidth</code>.</li>
+<li>Generic fallback counters excluded from analysis: <code>none</code>.</li>
+<li>Unsupported counter families excluded from analysis: <code>Floating-point arithmetic, L2 misses</code>.</li>
+<li>Missing required strict-study families: <code>none</code>.</li>
+<li>Uncore readiness note: <code>System-wide perf is blocked on this host. perf_event_paranoid=2; lower it or grant perf capability for uncore collection.</code>.</li>
+</ul>
+<h2>Dataset Summary</h2>
+<table>
+<thead>
+<tr>
+<th>Statistic</th>
+<th>Value</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Interval rows</td>
+<td>9409</td>
+</tr>
+<tr>
+<td>Aggregate rows</td>
+<td>0</td>
+</tr>
+<tr>
+<td>Runs merged</td>
+<td>60</td>
+</tr>
+<tr>
+<td>Manifest runs</td>
+<td>60</td>
+</tr>
+<tr>
+<td>Stale raw runs excluded</td>
+<td>213</td>
+</tr>
+<tr>
+<td>Observed raw counter columns</td>
+<td>10</td>
+</tr>
+<tr>
+<td>Confident counter columns kept</td>
+<td>10</td>
+</tr>
+<tr>
+<td>Generic fallback columns excluded</td>
+<td>0</td>
+</tr>
+<tr>
+<td>Columns removed as constant</td>
+<td>0</td>
+</tr>
+<tr>
+<td>Strict core PMU study ready</td>
+<td>Yes</td>
+</tr>
+<tr>
+<td>Uncore IMC study ready</td>
+<td>No</td>
+</tr>
+<tr>
+<td>Uncore blocked by host policy</td>
+<td>Yes</td>
+</tr>
+<tr>
+<td>Observed system-wide uncore columns</td>
+<td>0</td>
+</tr>
+</tbody>
+</table>
+<h2>Preprocessing and Derived Metrics</h2>
+<p>The preprocessing stage handles missing values with median imputation after logging missingness, removes constant columns, creates raw and winsorized views, and derives CPI, IPC, MPKI-style cache/branch/off-core metrics, and FP intensity metrics. Raw-counter and normalized-counter views are intentionally separated because raw counts are strongly scale-sensitive. For normalized and derived analysis views, samples with non-positive interval duration, instructions retired, or cycles are excluded to avoid startup/shutdown artifacts.</p>
+<ul>
+<li>Analysis-ready rows kept: <code>9306</code> of <code>9409</code>.</li>
+<li>Dropped rows: <code>103</code>.</li>
+<li>Drop reasons: <code>non positive cycles: 100, non positive instructions retired: 100, non positive interval duration ms: 0</code>.</li>
+</ul>
+<h2>Global Correlation Results</h2>
+<p>Raw counters show which indicators move together at the absolute-count level, but these relationships may largely reflect workload intensity. Normalized counters reduce that effect and are the better basis for redundancy decisions. This Xeon host exposes Intel uncore IMC PMUs, but system-wide collection is currently blocked by host policy, so the present artifact reflects confident core PMU analysis only.</p>
+<h3>Raw Pearson Heatmap</h3>
+<p><img alt="Raw Pearson Heatmap" src="../tables/raw/pearson_heatmap.png" /></p>
+<h3>Raw Spearman Heatmap</h3>
+<p><img alt="Raw Spearman Heatmap" src="../tables/raw/spearman_heatmap.png" /></p>
+<h3>Normalized Pearson Heatmap</h3>
+<p><img alt="Normalized Pearson Heatmap" src="../tables/normalized/pearson_heatmap.png" /></p>
+<h3>Normalized Spearman Heatmap</h3>
+<p><img alt="Normalized Spearman Heatmap" src="../tables/normalized/spearman_heatmap.png" /></p>
+<h3>Clustered Heatmap</h3>
+<p><img alt="Clustered Heatmap" src="../tables/normalized/clustered_heatmap.png" /></p>
+<h3>Dendrogram</h3>
+<p><img alt="Dendrogram" src="../tables/normalized/dendrogram.png" /></p>
+<h2>Stratified Results</h2>
+<p>Stratified analysis is emitted by workload and thread count when enough samples exist. Without explicit phase labels, workload-local stability is the main check on whether redundancy patterns persist across applications.</p>
+<h3>Top Positive and Negative Correlations</h3>
+<p><img alt="Top Positive and Negative Correlations" src="../tables/normalized/top_correlations.png" /></p>
+<h2>Multicollinearity Results</h2>
+<p>Variance inflation factors complement pairwise correlation: a counter can have moderate pairwise correlations but still be redundant when explained by several others together. VIF is therefore best used alongside correlation-threshold grouping instead of as a replacement.</p>
+<h3>VIF Bar Chart</h3>
+<p><img alt="VIF Bar Chart" src="../tables/normalized/vif.png" /></p>
+<h2>Feature Selection Recommendations</h2>
+<h3>G01</h3>
+<ul>
+<li>Keep: <code>Cycles / ms</code></li>
+<li>Drop: Instructions retired / ms</li>
+<li>Members: Cycles / ms, Instructions retired / ms</li>
+<li>Reason: Selected for higher portability/interpretability and lower missingness; max within-group |rho|=0.976</li>
+</ul>
+<h3>G02</h3>
+<ul>
+<li>Keep: <code>LLC references / KI</code></li>
+<li>Drop: Off-core / DRAM demand reads / KI</li>
+<li>Members: LLC references / KI, Off-core / DRAM demand reads / KI</li>
+<li>Reason: Selected for higher portability/interpretability and lower missingness; max within-group |rho|=0.976</li>
+</ul>
+<p>The full machine-readable recommendation table remains available in <code>../tables/recommendations.csv</code>.</p>
+<h2>Limitations</h2>
+<ul>
+<li>Raw counters can correlate simply because all counts grow with activity, sample duration, or thread count.</li>
+<li>Vendor-specific PMU names differ substantially; unsupported counters are logged and left blank.</li>
+<li>Intel PCM support is best-effort because deployments vary by binary name, permissions, and CLI syntax.</li>
+<li>Per-core task-local attribution is limited without privileged system-wide PMU access.</li>
+<li>Intel uncore IMC bandwidth on this host requires system-wide perf access; when <code>perf_event_paranoid</code> blocks that path, the report explicitly omits those system-wide metrics.</li>
+</ul>
+<h2>Next Steps</h2>
+<ul>
+<li>Validate the recommended reduced set against a downstream phase classifier or predictor.</li>
+<li>Repeat the study on additional Intel, AMD, and Arm systems to compare portability.</li>
+<li>Extend the stratified analysis with application-specific phases from PARSEC or SPEC CPU2017 when those suites are available.</li>
+<li>Lower <code>perf_event_paranoid</code> or grant equivalent perf capability on this Xeon host if you want IMC bandwidth collected alongside the strict core PMU set.</li>
+</ul>
+<h2>Appendix</h2>
+<ul>
+<li>Raw indicators analyzed: <code>Instructions retired, Cycles, Branch instructions, Branch mispredictions, L1 data loads, L1 data stores, LLC references, LLC misses, Off-core / DRAM demand reads, Resource stalls</code></li>
+<li>Derived indicators analyzed: <code>6</code></li>
+<li>Counter families defined in the project: <code>instructions_retired, cycles, branch_instructions, branch_mispredictions, l1d_loads, l1d_stores, l2_misses, llc_references, llc_misses, offcore_demand_data_reads, fp_arithmetic, resource_stalls, memory_read_bandwidth, memory_write_bandwidth, total_memory_bandwidth</code></li>
+</ul>
+<h2>How to interpret the results</h2>
+<ul>
+<li>Two counters are likely redundant when they remain highly correlated in the normalized Spearman view and also appear in the same high-VIF neighborhood.</li>
+<li>Raw and normalized views can disagree because raw counts mix true behavior with overall workload activity and duration scaling.</li>
+<li>Use correlation to find pairwise or group redundancy, then use VIF to see whether an indicator adds information once the rest of the set is considered.</li>
+<li>Choose a minimal portable counter set by preferring common counters with low missingness and clear meaning, then dropping vendor-specific counters only when a more portable representative preserves the same signal.</li>
+</ul></body></html>

@@ -1,0 +1,24 @@
+{
+  "aggregate_dataset": "/home/kk6081/res/results/processed/merged_aggregate_dataset.csv",
+  "aggregate_rows": 0,
+  "filtered_stale_run_count": 213,
+  "interval_dataset": "/home/kk6081/res/results/processed/merged_interval_dataset.csv",
+  "interval_rows": 9409,
+  "manifest_path": "/home/kk6081/res/results/run_manifest.json",
+  "manifest_run_count": 60,
+  "manifest_used": true,
+  "merged_run_count": 60,
+  "metadata_columns": [
+    "timestamp_ms",
+    "interval_duration_ms",
+    "workload",
+    "suite",
+    "run_id",
+    "threads",
+    "cpu_or_core_id",
+    "phase_label"
+  ],
+  "observed_system_wide_uncore_columns": [],
+  "run_count": 60,
+  "uncore_aligned_interval_rows": 0
+}

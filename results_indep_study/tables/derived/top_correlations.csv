@@ -1,0 +1,16 @@
+indicator_a,indicator_b,correlation,abs_correlation,method
+metric__cpi,metric__ipc,-1.0,1.0,spearman
+metric__cpi,metric__llc_mpki,0.8857142857142858,0.8857142857142858,spearman
+metric__ipc,metric__llc_mpki,-0.8857142857142858,0.8857142857142858,spearman
+metric__branch_mpki,metric__offcore_read_mpki,0.8857142857142858,0.8857142857142858,spearman
+metric__cpi,metric__offcore_read_mpki,0.5428571428571429,0.5428571428571429,spearman
+metric__ipc,metric__offcore_read_mpki,-0.5428571428571429,0.5428571428571429,spearman
+metric__cpi,metric__branch_mpki,0.3142857142857143,0.3142857142857143,spearman
+metric__ipc,metric__branch_mpki,-0.3142857142857143,0.3142857142857143,spearman
+metric__branch_mpki,metric__branch_per_ki,0.3142857142857143,0.3142857142857143,spearman
+metric__llc_mpki,metric__offcore_read_mpki,0.3142857142857143,0.3142857142857143,spearman
+metric__cpi,metric__branch_per_ki,0.2571428571428572,0.2571428571428572,spearman
+metric__ipc,metric__branch_per_ki,-0.2571428571428572,0.2571428571428572,spearman
+metric__branch_per_ki,metric__llc_mpki,0.2571428571428572,0.2571428571428572,spearman
+metric__branch_mpki,metric__llc_mpki,0.028571428571428574,0.028571428571428574,spearman
+metric__branch_per_ki,metric__offcore_read_mpki,0.028571428571428574,0.028571428571428574,spearman

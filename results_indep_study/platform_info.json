@@ -1,0 +1,181 @@
+{
+  "architecture": "x86_64",
+  "cache_detail": [
+    {
+      "coherency_line_size": "64",
+      "index": "index0",
+      "level": "1",
+      "number_of_sets": "64",
+      "shared_cpu_list": "0",
+      "size": "32K",
+      "type": "Data",
+      "ways_of_associativity": "8"
+    },
+    {
+      "coherency_line_size": "64",
+      "index": "index1",
+      "level": "1",
+      "number_of_sets": "64",
+      "shared_cpu_list": "0",
+      "size": "32K",
+      "type": "Instruction",
+      "ways_of_associativity": "8"
+    },
+    {
+      "coherency_line_size": "64",
+      "index": "index2",
+      "level": "2",
+      "number_of_sets": "512",
+      "shared_cpu_list": "0",
+      "size": "256K",
+      "type": "Unified",
+      "ways_of_associativity": "8"
+    },
+    {
+      "coherency_line_size": "64",
+      "index": "index3",
+      "level": "3",
+      "number_of_sets": "20480",
+      "shared_cpu_list": "0,2,4,6,8,10,12,14,16,18",
+      "size": "25600K",
+      "type": "Unified",
+      "ways_of_associativity": "20"
+    }
+  ],
+  "cache_summary": {
+    "l1d": "640 KiB (20 instances)",
+    "l1i": "640 KiB (20 instances)",
+    "l2": "5 MiB (20 instances)",
+    "l3": "50 MiB (2 instances)"
+  },
+  "cores_per_socket": 10,
+  "cpu_family": 6,
+  "cpu_model": "Intel(R) Xeon(R) CPU E5-2680 v2 @ 2.80GHz",
+  "cpu_model_id": 62,
+  "cpu_vendor": "GenuineIntel",
+  "intel_pcm": {
+    "available": false,
+    "path": ""
+  },
+  "logical_cpus": 20,
+  "lscpu_raw": "Architecture:                            x86_64\nCPU op-mode(s):                          32-bit, 64-bit\nAddress sizes:                           46 bits physical, 48 bits virtual\nByte Order:                              Little Endian\nCPU(s):                                  20\nOn-line CPU(s) list:                     0-19\nVendor ID:                               GenuineIntel\nModel name:                              Intel(R) Xeon(R) CPU E5-2680 v2 @ 2.80GHz\nCPU family:                              6\nModel:                                   62\nThread(s) per core:                      1\nCore(s) per socket:                      10\nSocket(s):                               2\nStepping:                                4\nCPU(s) scaling MHz:                      86%\nCPU max MHz:                             3600.0000\nCPU min MHz:                             1200.0000\nBogoMIPS:                                5599.96\nFlags:                                   fpu vme de pse tsc msr pae mce cx8 apic sep mtrr pge mca cmov pat pse36 clflush dts acpi mmx fxsr sse sse2 ss ht tm pbe syscall nx pdpe1gb rdtscp lm constant_tsc arch_perfmon pebs bts rep_good nopl xtopology nonstop_tsc cpuid aperfmperf pni pclmulqdq dtes64 monitor ds_cpl vmx smx est tm2 ssse3 cx16 xtpr pdcm pcid dca sse4_1 sse4_2 x2apic popcnt tsc_deadline_timer aes xsave avx f16c rdrand lahf_lm cpuid_fault pti ssbd ibrs ibpb stibp tpr_shadow flexpriority ept vpid fsgsbase smep erms xsaveopt dtherm ida arat pln pts vnmi md_clear flush_l1d\nVirtualization:                          VT-x\nL1d cache:                               640 KiB (20 instances)\nL1i cache:                               640 KiB (20 instances)\nL2 cache:                                5 MiB (20 instances)\nL3 cache:                                50 MiB (2 instances)\nNUMA node(s):                            2\nNUMA node0 CPU(s):                       0,2,4,6,8,10,12,14,16,18\nNUMA node1 CPU(s):                       1,3,5,7,9,11,13,15,17,19\nVulnerability Gather data sampling:      Not affected\nVulnerability Indirect target selection: Not affected\nVulnerability Itlb multihit:             KVM: Mitigation: Split huge pages\nVulnerability L1tf:                      Mitigation; PTE Inversion; VMX conditional cache flushes, SMT disabled\nVulnerability Mds:                       Mitigation; Clear CPU buffers; SMT disabled\nVulnerability Meltdown:                  Mitigation; PTI\nVulnerability Mmio stale data:           Unknown: No mitigations\nVulnerability Reg file data sampling:    Not affected\nVulnerability Retbleed:                  Not affected\nVulnerability Spec rstack overflow:      Not affected\nVulnerability Spec store bypass:         Mitigation; Speculative Store Bypass disabled via prctl\nVulnerability Spectre v1:                Mitigation; usercopy/swapgs barriers and __user pointer sanitization\nVulnerability Spectre v2:                Mitigation; Retpolines; IBPB conditional; IBRS_FW; RSB filling; PBRSB-eIBRS Not affected; BHI Not affected\nVulnerability Srbds:                     Not affected\nVulnerability Tsa:                       Not affected\nVulnerability Tsx async abort:           Not affected\nVulnerability Vmscape:                   Mitigation; IBPB before exit to userspace\n",
+  "numa_nodes": 2,
+  "online_cpus": [
+    0,
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8,
+    9,
+    10,
+    11,
+    12,
+    13,
+    14,
+    15,
+    16,
+    17,
+    18,
+    19
+  ],
+  "parsec": {
+    "available": true,
+    "benchmarks": [
+      "blackscholes",
+      "bodytrack",
+      "facesim",
+      "ferret",
+      "fluidanimate",
+      "freqmine",
+      "raytrace",
+      "swaptions",
+      "vips",
+      "x264",
+      "canneal",
+      "dedup",
+      "streamcluster",
+      "netdedup",
+      "netferret",
+      "netstreamcluster"
+    ],
+    "parsecmgmt": "/home/kk6081/res/third_party/parsec-benchmark/bin/parsecmgmt",
+    "root": "/home/kk6081/res/third_party/parsec-benchmark"
+  },
+  "perf": {
+    "path": "/usr/bin/perf",
+    "perf_event_paranoid": "2",
+    "version": "perf version 5.14.0-611.47.1.el9_7.x86_64"
+  },
+  "pmu_study_readiness": {
+    "missing_required_confident_families": [],
+    "raw_confident_families": [
+      "branch_instructions",
+      "branch_mispredictions",
+      "cycles",
+      "instructions_retired",
+      "l1d_loads",
+      "l1d_stores",
+      "llc_misses",
+      "llc_references",
+      "offcore_demand_data_reads",
+      "resource_stalls"
+    ],
+    "strict_hardware_study_reason": "",
+    "study_ready": true,
+    "study_ready_core": true,
+    "study_ready_uncore": false,
+    "uncore_devices_present": true,
+    "uncore_imc_devices": [
+      "uncore_imc_0",
+      "uncore_imc_1",
+      "uncore_imc_2",
+      "uncore_imc_3"
+    ],
+    "uncore_policy_blocked": true,
+    "uncore_probe_event": "uncore_imc_0/cas_count_read/",
+    "uncore_probe_output": "",
+    "uncore_probe_returncode": 0,
+    "uncore_reason": "System-wide perf is blocked on this host. perf_event_paranoid=2; lower it or grant perf capability for uncore collection."
+  },
+  "socket_count": 2,
+  "spec2017": {
+    "available": false,
+    "benchmarks": [],
+    "note": "",
+    "root": "",
+    "runcpu": ""
+  },
+  "threads_per_core": 1,
+  "uncore_devices": [
+    "uncore_cbox_0",
+    "uncore_cbox_1",
+    "uncore_cbox_2",
+    "uncore_cbox_3",
+    "uncore_cbox_4",
+    "uncore_cbox_5",
+    "uncore_cbox_6",
+    "uncore_cbox_7",
+    "uncore_cbox_8",
+    "uncore_cbox_9",
+    "uncore_ha_0",
+    "uncore_imc_0",
+    "uncore_imc_1",
+    "uncore_imc_2",
+    "uncore_imc_3",
+    "uncore_pcu",
+    "uncore_r2pcie",
+    "uncore_r3qpi_0",
+    "uncore_ubox"
+  ],
+  "uncore_imc_devices": [
+    "uncore_imc_0",
+    "uncore_imc_1",
+    "uncore_imc_2",
+    "uncore_imc_3"
+  ],
+  "vendor_key": "intel"
+}

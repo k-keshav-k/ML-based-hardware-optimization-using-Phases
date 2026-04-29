@@ -1,0 +1,294 @@
+timestamp_ms,value,unit,event_name,event_name_normalized,runtime_ns,enabled_pct,metric_value,metric_unit,status
+12.700579,0.0,,instructions:u,instructions,353461.0,77.0,nan,,ok
+12.700579,0.0,,cycles:u,cycles,456479.0,100.0,nan,,ok
+12.700579,0.0,,branches:u,branches,456479.0,100.0,nan,,ok
+12.700579,0.0,,branch-misses:u,branch-misses,456479.0,100.0,nan,,ok
+12.700579,0.0,,L1-dcache-loads:u,l1-dcache-loads,456479.0,100.0,nan,,ok
+12.700579,0.0,,cache-references:u,cache-references,103018.0,22.0,nan,,ok
+12.700579,nan,,cache-misses:u,cache-misses,0.0,0.0,nan,,ok
+12.700579,nan,,stalled-cycles-frontend:u,stalled-cycles-frontend,0.0,0.0,nan,,ok
+33.542018999999996,nan,,instructions:u,instructions,0.0,0.0,nan,,ok
+33.542018999999996,15737.0,,cycles:u,cycles,576775.0,14.0,nan,,ok
+33.542018999999996,76343.0,,branches:u,branches,1579791.0,39.0,nan,,ok
+33.542018999999996,7404.0,,branch-misses:u,branch-misses,2582045.0,64.0,9.7,of all branches,ok
+33.542018999999996,167132.0,,L1-dcache-loads:u,l1-dcache-loads,3576880.0,88.0,nan,,ok
+33.542018999999996,22084.0,,cache-references:u,cache-references,4034222.0,100.0,nan,,ok
+33.542018999999996,4668.0,,cache-misses:u,cache-misses,3457447.0,85.0,21.14,of all cache refs,ok
+33.542018999999996,nan,,stalled-cycles-frontend:u,stalled-cycles-frontend,0.0,0.0,nan,,ok
+47.669178,nan,,instructions:u,instructions,0.0,100.0,nan,,ok
+47.669178,nan,,cycles:u,cycles,0.0,100.0,nan,,ok
+47.669178,nan,,branches:u,branches,0.0,100.0,nan,,ok
+47.669178,nan,,branch-misses:u,branch-misses,0.0,100.0,nan,,ok
+47.669178,nan,,L1-dcache-loads:u,l1-dcache-loads,0.0,100.0,nan,,ok
+47.669178,nan,,cache-references:u,cache-references,0.0,100.0,nan,,ok
+47.669178,nan,,cache-misses:u,cache-misses,0.0,100.0,nan,,ok
+47.669178,nan,,stalled-cycles-frontend:u,stalled-cycles-frontend,0.0,100.0,nan,,ok
+61.475120000000004,nan,,instructions:u,instructions,0.0,100.0,nan,,ok
+61.475120000000004,nan,,cycles:u,cycles,0.0,100.0,nan,,ok
+61.475120000000004,nan,,branches:u,branches,0.0,100.0,nan,,ok
+61.475120000000004,nan,,branch-misses:u,branch-misses,0.0,100.0,nan,,ok
+61.475120000000004,nan,,L1-dcache-loads:u,l1-dcache-loads,0.0,100.0,nan,,ok
+61.475120000000004,nan,,cache-references:u,cache-references,0.0,100.0,nan,,ok
+61.475120000000004,nan,,cache-misses:u,cache-misses,0.0,100.0,nan,,ok
+61.475120000000004,nan,,stalled-cycles-frontend:u,stalled-cycles-frontend,0.0,100.0,nan,,ok
+73.103749,0.0,,instructions:u,instructions,1092275.0,43.0,nan,,ok
+73.103749,0.0,,cycles:u,cycles,94379.0,3.0,nan,,ok
+73.103749,0.0,,branches:u,branches,94379.0,3.0,nan,,ok
+73.103749,0.0,,branch-misses:u,branch-misses,94379.0,3.0,nan,,ok
+73.103749,nan,,L1-dcache-loads:u,l1-dcache-loads,0.0,0.0,nan,,ok
+73.103749,297.0,,cache-references:u,cache-references,1441444.0,56.0,nan,,ok
+73.103749,145.0,,cache-misses:u,cache-misses,2439340.0,96.0,48.82,of all cache refs,ok
+73.103749,0.0,,stalled-cycles-frontend:u,stalled-cycles-frontend,1092275.0,43.0,nan,,ok
+83.67271699999999,nan,,instructions:u,instructions,0.0,100.0,nan,,ok
+83.67271699999999,nan,,cycles:u,cycles,0.0,100.0,nan,,ok
+83.67271699999999,nan,,branches:u,branches,0.0,100.0,nan,,ok
+83.67271699999999,nan,,branch-misses:u,branch-misses,0.0,100.0,nan,,ok
+83.67271699999999,nan,,L1-dcache-loads:u,l1-dcache-loads,0.0,100.0,nan,,ok
+83.67271699999999,nan,,cache-references:u,cache-references,0.0,100.0,nan,,ok
+83.67271699999999,nan,,cache-misses:u,cache-misses,0.0,100.0,nan,,ok
+83.67271699999999,nan,,stalled-cycles-frontend:u,stalled-cycles-frontend,0.0,100.0,nan,,ok
+94.478995,nan,,instructions:u,instructions,0.0,100.0,nan,,ok
+94.478995,nan,,cycles:u,cycles,0.0,100.0,nan,,ok
+94.478995,nan,,branches:u,branches,0.0,100.0,nan,,ok
+94.478995,nan,,branch-misses:u,branch-misses,0.0,100.0,nan,,ok
+94.478995,nan,,L1-dcache-loads:u,l1-dcache-loads,0.0,100.0,nan,,ok
+94.478995,nan,,cache-references:u,cache-references,0.0,100.0,nan,,ok
+94.478995,nan,,cache-misses:u,cache-misses,0.0,100.0,nan,,ok
+94.478995,nan,,stalled-cycles-frontend:u,stalled-cycles-frontend,0.0,100.0,nan,,ok
+105.315457,90402.0,,instructions:u,instructions,1787418.0,77.0,0.14,insn per cycle,ok
+105.315457,nan,,,,nan,nan,5.89,stalled cycles per insn,unknown
+105.315457,666282.0,,cycles:u,cycles,2145383.0,93.0,nan,,ok
+105.315457,19154.0,,branches:u,branches,2301750.0,100.0,nan,,ok
+105.315457,1927.0,,branch-misses:u,branch-misses,2301750.0,100.0,10.06,of all branches,ok
+105.315457,8146.0,,L1-dcache-loads:u,l1-dcache-loads,1542414.0,67.0,nan,,ok
+105.315457,2640.0,,cache-references:u,cache-references,514332.0,22.0,nan,,ok
+105.315457,0.0,,cache-misses:u,cache-misses,156367.0,6.0,nan,,ok
+105.315457,532287.0,,stalled-cycles-frontend:u,stalled-cycles-frontend,759336.0,32.0,79.89,frontend cycles idle,ok
+115.998777,11537949.0,,instructions:u,instructions,3007775.0,29.0,0.62,insn per cycle,ok
+115.998777,nan,,,,nan,nan,0.33,stalled cycles per insn,unknown
+115.998777,18684296.0,,cycles:u,cycles,3006619.0,29.0,nan,,ok
+115.998777,1649118.0,,branches:u,branches,4919117.0,47.0,nan,,ok
+115.998777,425398.0,,branch-misses:u,branch-misses,6922422.0,66.0,25.8,of all branches,ok
+115.998777,94390.0,,L1-dcache-loads:u,l1-dcache-loads,7352902.0,70.0,nan,,ok
+115.998777,14681.0,,cache-references:u,cache-references,7384481.0,71.0,nan,,ok
+115.998777,3371.0,,cache-misses:u,cache-misses,7398681.0,71.0,22.96,of all cache refs,ok
+115.998777,3806173.0,,stalled-cycles-frontend:u,stalled-cycles-frontend,2026349.0,19.0,20.37,frontend cycles idle,ok
+126.69417499999999,13871621.0,,instructions:u,instructions,4153081.0,38.0,0.62,insn per cycle,ok
+126.69417499999999,nan,,,,nan,nan,0.31,stalled cycles per insn,unknown
+126.69417499999999,22482884.0,,cycles:u,cycles,3173282.0,29.0,nan,,ok
+126.69417499999999,2269007.0,,branches:u,branches,4200858.0,38.0,nan,,ok
+126.69417499999999,632678.0,,branch-misses:u,branch-misses,5227596.0,48.0,27.88,of all branches,ok
+126.69417499999999,2799.0,,L1-dcache-loads:u,l1-dcache-loads,5545225.0,51.0,nan,,ok
+126.69417499999999,839.0,,cache-references:u,cache-references,6513270.0,60.0,nan,,ok
+126.69417499999999,100.0,,cache-misses:u,cache-misses,7512279.0,69.0,11.92,of all cache refs,ok
+126.69417499999999,4274301.0,,stalled-cycles-frontend:u,stalled-cycles-frontend,3334424.0,30.0,19.01,frontend cycles idle,ok
+137.907782,14370813.0,,instructions:u,instructions,4864079.0,43.0,0.6,insn per cycle,ok
+137.907782,nan,,,,nan,nan,0.28,stalled cycles per insn,unknown
+137.907782,24090837.0,,cycles:u,cycles,5817295.0,52.0,nan,,ok
+137.907782,2435132.0,,branches:u,branches,7161663.0,64.0,nan,,ok
+137.907782,663530.0,,branch-misses:u,branch-misses,8152373.0,73.0,27.25,of all branches,ok
+137.907782,4053.0,,L1-dcache-loads:u,l1-dcache-loads,7393497.0,66.0,nan,,ok
+137.907782,1091.0,,cache-references:u,cache-references,6408796.0,57.0,nan,,ok
+137.907782,43.0,,cache-misses:u,cache-misses,5444030.0,48.0,3.94,of all cache refs,ok
+137.907782,4069244.0,,stalled-cycles-frontend:u,stalled-cycles-frontend,2678545.0,24.0,16.89,frontend cycles idle,ok
+148.863631,14801109.0,,instructions:u,instructions,2995942.0,27.0,0.63,insn per cycle,ok
+148.863631,nan,,,,nan,nan,0.3,stalled cycles per insn,unknown
+148.863631,23344064.0,,cycles:u,cycles,3001045.0,27.0,nan,,ok
+148.863631,2404702.0,,branches:u,branches,4638619.0,42.0,nan,,ok
+148.863631,630688.0,,branch-misses:u,branch-misses,6612709.0,60.0,26.23,of all branches,ok
+148.863631,3052.0,,L1-dcache-loads:u,l1-dcache-loads,7597990.0,69.0,nan,,ok
+148.863631,793.0,,cache-references:u,cache-references,7927092.0,72.0,nan,,ok
+148.863631,56.0,,cache-misses:u,cache-misses,7922456.0,72.0,7.06,of all cache refs,ok
+148.863631,4454883.0,,stalled-cycles-frontend:u,stalled-cycles-frontend,1999855.0,18.0,19.08,frontend cycles idle,ok
+159.8544,14434396.0,,instructions:u,instructions,5304292.0,48.0,0.62,insn per cycle,ok
+159.8544,nan,,,,nan,nan,0.28,stalled cycles per insn,unknown
+159.8544,23358763.0,,cycles:u,cycles,4338380.0,39.0,nan,,ok
+159.8544,2400851.0,,branches:u,branches,5379379.0,48.0,nan,,ok
+159.8544,645041.0,,branch-misses:u,branch-misses,6412517.0,57.0,26.87,of all branches,ok
+159.8544,3627.0,,L1-dcache-loads:u,l1-dcache-loads,5441415.0,48.0,nan,,ok
+159.8544,908.0,,cache-references:u,cache-references,5649798.0,50.0,nan,,ok
+159.8544,40.0,,cache-misses:u,cache-misses,6633969.0,59.0,4.41,of all cache refs,ok
+159.8544,4074090.0,,stalled-cycles-frontend:u,stalled-cycles-frontend,4006637.0,36.0,17.44,frontend cycles idle,ok
+170.79903199999998,13928110.0,,instructions:u,instructions,3697857.0,33.0,0.61,insn per cycle,ok
+170.79903199999998,nan,,,,nan,nan,0.3,stalled cycles per insn,unknown
+170.79903199999998,22975192.0,,cycles:u,cycles,4664184.0,42.0,nan,,ok
+170.79903199999998,2278815.0,,branches:u,branches,6624686.0,61.0,nan,,ok
+170.79903199999998,627099.0,,branch-misses:u,branch-misses,7836011.0,72.0,27.52,of all branches,ok
+170.79903199999998,3820.0,,L1-dcache-loads:u,l1-dcache-loads,7827389.0,72.0,nan,,ok
+170.79903199999998,863.0,,cache-references:u,cache-references,7283321.0,67.0,nan,,ok
+170.79903199999998,68.0,,cache-misses:u,cache-misses,6294141.0,58.0,7.88,of all cache refs,ok
+170.79903199999998,4203901.0,,stalled-cycles-frontend:u,stalled-cycles-frontend,1997849.0,18.0,18.3,frontend cycles idle,ok
+181.808616,14692352.0,,instructions:u,instructions,3233258.0,29.0,0.6,insn per cycle,ok
+181.808616,nan,,,,nan,nan,0.29,stalled cycles per insn,unknown
+181.808616,24457418.0,,cycles:u,cycles,3006576.0,27.0,nan,,ok
+181.808616,2392726.0,,branches:u,branches,4005867.0,36.0,nan,,ok
+181.808616,627203.0,,branch-misses:u,branch-misses,5750548.0,52.0,26.21,of all branches,ok
+181.808616,3840.0,,L1-dcache-loads:u,l1-dcache-loads,6727654.0,61.0,nan,,ok
+181.808616,937.0,,cache-references:u,cache-references,7714268.0,70.0,nan,,ok
+181.808616,121.0,,cache-misses:u,cache-misses,7981952.0,72.0,12.91,of all cache refs,ok
+181.808616,4191330.0,,stalled-cycles-frontend:u,stalled-cycles-frontend,2308467.0,20.0,17.14,frontend cycles idle,ok
+192.5138,14035468.0,,instructions:u,instructions,5690151.0,53.0,0.6,insn per cycle,ok
+192.5138,nan,,,,nan,nan,0.29,stalled cycles per insn,unknown
+192.5138,23225879.0,,cycles:u,cycles,4942791.0,46.0,nan,,ok
+192.5138,2338074.0,,branches:u,branches,5956332.0,55.0,nan,,ok
+192.5138,640284.0,,branch-misses:u,branch-misses,6974798.0,65.0,27.39,of all branches,ok
+192.5138,4131.0,,L1-dcache-loads:u,l1-dcache-loads,6005591.0,55.0,nan,,ok
+192.5138,853.0,,cache-references:u,cache-references,5046733.0,46.0,nan,,ok
+192.5138,103.0,,cache-misses:u,cache-misses,5712802.0,53.0,12.08,of all cache refs,ok
+192.5138,4095712.0,,stalled-cycles-frontend:u,stalled-cycles-frontend,3690058.0,34.0,17.63,frontend cycles idle,ok
+203.670939,14683533.0,,instructions:u,instructions,3079487.0,27.0,0.59,insn per cycle,ok
+203.670939,nan,,,,nan,nan,0.3,stalled cycles per insn,unknown
+203.670939,24818888.0,,cycles:u,cycles,4062720.0,36.0,nan,,ok
+203.670939,2479436.0,,branches:u,branches,6056319.0,54.0,nan,,ok
+203.670939,675548.0,,branch-misses:u,branch-misses,8032428.0,71.0,27.25,of all branches,ok
+203.670939,3536.0,,L1-dcache-loads:u,l1-dcache-loads,8157740.0,73.0,nan,,ok
+203.670939,932.0,,cache-references:u,cache-references,8133834.0,73.0,nan,,ok
+203.670939,100.0,,cache-misses:u,cache-misses,7204994.0,64.0,10.73,of all cache refs,ok
+203.670939,4338443.0,,stalled-cycles-frontend:u,stalled-cycles-frontend,2000462.0,17.0,17.48,frontend cycles idle,ok
+214.85394,14365977.0,,instructions:u,instructions,4301882.0,38.0,0.61,insn per cycle,ok
+214.85394,nan,,,,nan,nan,0.28,stalled cycles per insn,unknown
+214.85394,23740569.0,,cycles:u,cycles,3333000.0,29.0,nan,,ok
+214.85394,2360275.0,,branches:u,branches,4369194.0,38.0,nan,,ok
+214.85394,638288.0,,branch-misses:u,branch-misses,5384397.0,47.0,27.04,of all branches,ok
+214.85394,3358.0,,L1-dcache-loads:u,l1-dcache-loads,5834927.0,51.0,nan,,ok
+214.85394,892.0,,cache-references:u,cache-references,6818252.0,60.0,nan,,ok
+214.85394,84.0,,cache-misses:u,cache-misses,7792670.0,69.0,9.42,of all cache refs,ok
+214.85394,4091912.0,,stalled-cycles-frontend:u,stalled-cycles-frontend,3430021.0,30.0,17.24,frontend cycles idle,ok
+225.673492,13835657.0,,instructions:u,instructions,4710842.0,43.0,0.6,insn per cycle,ok
+225.673492,nan,,,,nan,nan,0.29,stalled cycles per insn,unknown
+225.673492,23235067.0,,cycles:u,cycles,5647840.0,52.0,nan,,ok
+225.673492,2340067.0,,branches:u,branches,6780230.0,62.0,nan,,ok
+225.673492,639948.0,,branch-misses:u,branch-misses,7765164.0,72.0,27.35,of all branches,ok
+225.673492,3606.0,,L1-dcache-loads:u,l1-dcache-loads,7172212.0,66.0,nan,,ok
+225.673492,997.0,,cache-references:u,cache-references,6189736.0,57.0,nan,,ok
+225.673492,72.0,,cache-misses:u,cache-misses,5246081.0,48.0,7.22,of all cache refs,ok
+225.673492,4034466.0,,stalled-cycles-frontend:u,stalled-cycles-frontend,2586468.0,23.0,17.36,frontend cycles idle,ok
+236.67434300000002,14868760.0,,instructions:u,instructions,3005529.0,27.0,0.64,insn per cycle,ok
+236.67434300000002,nan,,,,nan,nan,0.29,stalled cycles per insn,unknown
+236.67434300000002,23369749.0,,cycles:u,cycles,3004425.0,27.0,nan,,ok
+236.67434300000002,2394596.0,,branches:u,branches,4859133.0,44.0,nan,,ok
+236.67434300000002,644762.0,,branch-misses:u,branch-misses,6835576.0,62.0,26.93,of all branches,ok
+236.67434300000002,3286.0,,L1-dcache-loads:u,l1-dcache-loads,7812268.0,71.0,nan,,ok
+236.67434300000002,831.0,,cache-references:u,cache-references,7976879.0,72.0,nan,,ok
+236.67434300000002,50.0,,cache-misses:u,cache-misses,7967000.0,72.0,6.02,of all cache refs,ok
+236.67434300000002,4309305.0,,stalled-cycles-frontend:u,stalled-cycles-frontend,2005043.0,18.0,18.44,frontend cycles idle,ok
+247.48546199999998,14399389.0,,instructions:u,instructions,4914248.0,45.0,0.62,insn per cycle,ok
+247.48546199999998,nan,,,,nan,nan,0.3,stalled cycles per insn,unknown
+247.48546199999998,23193885.0,,cycles:u,cycles,3935489.0,36.0,nan,,ok
+247.48546199999998,2302641.0,,branches:u,branches,4949525.0,45.0,nan,,ok
+247.48546199999998,636645.0,,branch-misses:u,branch-misses,5971069.0,55.0,27.65,of all branches,ok
+247.48546199999998,2565.0,,L1-dcache-loads:u,l1-dcache-loads,5001953.0,46.0,nan,,ok
+247.48546199999998,860.0,,cache-references:u,cache-references,5814393.0,53.0,nan,,ok
+247.48546199999998,30.0,,cache-misses:u,cache-misses,6798400.0,62.0,3.49,of all cache refs,ok
+247.48546199999998,4313592.0,,stalled-cycles-frontend:u,stalled-cycles-frontend,3997897.0,36.0,18.6,frontend cycles idle,ok
+258.26854,14120164.0,,instructions:u,instructions,4097114.0,38.0,0.62,insn per cycle,ok
+258.26854,nan,,,,nan,nan,0.3,stalled cycles per insn,unknown
+258.26854,22655538.0,,cycles:u,cycles,5072825.0,47.0,nan,,ok
+258.26854,2273814.0,,branches:u,branches,6785785.0,62.0,nan,,ok
+258.26854,621953.0,,branch-misses:u,branch-misses,7793140.0,72.0,27.35,of all branches,ok
+258.26854,3833.0,,L1-dcache-loads:u,l1-dcache-loads,7777748.0,72.0,nan,,ok
+258.26854,1053.0,,cache-references:u,cache-references,6797979.0,62.0,nan,,ok
+258.26854,87.0,,cache-misses:u,cache-misses,5824090.0,53.0,8.26,of all cache refs,ok
+258.26854,4197568.0,,stalled-cycles-frontend:u,stalled-cycles-frontend,2007564.0,18.0,18.53,frontend cycles idle,ok
+269.468311,15027238.0,,instructions:u,instructions,3003283.0,26.0,0.61,insn per cycle,ok
+269.468311,nan,,,,nan,nan,0.29,stalled cycles per insn,unknown
+269.468311,24713553.0,,cycles:u,cycles,3008923.0,26.0,nan,,ok
+269.468311,2487795.0,,branches:u,branches,4270107.0,38.0,nan,,ok
+269.468311,674488.0,,branch-misses:u,branch-misses,6246796.0,56.0,27.11,of all branches,ok
+269.468311,3069.0,,L1-dcache-loads:u,l1-dcache-loads,7214480.0,64.0,nan,,ok
+269.468311,846.0,,cache-references:u,cache-references,8109770.0,72.0,nan,,ok
+269.468311,63.0,,cache-misses:u,cache-misses,8095464.0,72.0,7.45,of all cache refs,ok
+269.468311,4348590.0,,stalled-cycles-frontend:u,stalled-cycles-frontend,2001494.0,18.0,17.6,frontend cycles idle,ok
+280.162061,11426917.0,,instructions:u,instructions,4185068.0,44.0,0.61,insn per cycle,ok
+280.162061,nan,,,,nan,nan,0.29,stalled cycles per insn,unknown
+280.162061,18733359.0,,cycles:u,cycles,3186744.0,34.0,nan,,ok
+280.162061,1878940.0,,branches:u,branches,4192011.0,45.0,nan,,ok
+280.162061,523308.0,,branch-misses:u,branch-misses,5186400.0,55.0,27.85,of all branches,ok
+280.162061,3099.0,,L1-dcache-loads:u,l1-dcache-loads,4997053.0,53.0,nan,,ok
+280.162061,743.0,,cache-references:u,cache-references,5084894.0,54.0,nan,,ok
+280.162061,74.0,,cache-misses:u,cache-misses,6066237.0,65.0,9.96,of all cache refs,ok
+280.162061,3281199.0,,stalled-cycles-frontend:u,stalled-cycles-frontend,3184525.0,34.0,17.52,frontend cycles idle,ok
+291.043067,2630.0,,instructions:u,instructions,357567.0,100.0,0.04,insn per cycle,ok
+291.043067,nan,,,,nan,nan,21.86,stalled cycles per insn,unknown
+291.043067,62467.0,,cycles:u,cycles,357567.0,100.0,nan,,ok
+291.043067,540.0,,branches:u,branches,357567.0,100.0,nan,,ok
+291.043067,71.0,,branch-misses:u,branch-misses,357567.0,100.0,13.15,of all branches,ok
+291.043067,nan,,L1-dcache-loads:u,l1-dcache-loads,0.0,0.0,nan,,ok
+291.043067,nan,,cache-references:u,cache-references,0.0,0.0,nan,,ok
+291.043067,nan,,cache-misses:u,cache-misses,0.0,0.0,nan,,ok
+291.043067,57490.0,,stalled-cycles-frontend:u,stalled-cycles-frontend,357567.0,100.0,92.03,frontend cycles idle,ok
+301.888968,2630.0,,instructions:u,instructions,348172.0,100.0,0.06,insn per cycle,ok
+301.888968,nan,,,,nan,nan,15.55,stalled cycles per insn,unknown
+301.888968,46758.0,,cycles:u,cycles,348172.0,100.0,nan,,ok
+301.888968,540.0,,branches:u,branches,348172.0,100.0,nan,,ok
+301.888968,71.0,,branch-misses:u,branch-misses,348172.0,100.0,13.15,of all branches,ok
+301.888968,nan,,L1-dcache-loads:u,l1-dcache-loads,0.0,0.0,nan,,ok
+301.888968,nan,,cache-references:u,cache-references,0.0,0.0,nan,,ok
+301.888968,nan,,cache-misses:u,cache-misses,0.0,0.0,nan,,ok
+301.888968,40904.0,,stalled-cycles-frontend:u,stalled-cycles-frontend,348172.0,100.0,87.48,frontend cycles idle,ok
+312.67972199999997,2367.0,,instructions:u,instructions,361978.0,100.0,0.05,insn per cycle,ok
+312.67972199999997,nan,,,,nan,nan,18.97,stalled cycles per insn,unknown
+312.67972199999997,51396.0,,cycles:u,cycles,394300.0,100.0,nan,,ok
+312.67972199999997,540.0,,branches:u,branches,414167.0,100.0,nan,,ok
+312.67972199999997,70.0,,branch-misses:u,branch-misses,414167.0,100.0,12.96,of all branches,ok
+312.67972199999997,nan,,L1-dcache-loads:u,l1-dcache-loads,0.0,0.0,nan,,ok
+312.67972199999997,nan,,cache-references:u,cache-references,0.0,0.0,nan,,ok
+312.67972199999997,nan,,cache-misses:u,cache-misses,0.0,0.0,nan,,ok
+312.67972199999997,44910.0,,stalled-cycles-frontend:u,stalled-cycles-frontend,414167.0,100.0,87.38,frontend cycles idle,ok
+323.58771800000005,11287691.0,,instructions:u,instructions,3903281.0,43.0,0.6,insn per cycle,ok
+323.58771800000005,nan,,,,nan,nan,0.29,stalled cycles per insn,unknown
+323.58771800000005,18911785.0,,cycles:u,cycles,3873032.0,43.0,nan,,ok
+323.58771800000005,1916176.0,,branches:u,branches,4851029.0,54.0,nan,,ok
+323.58771800000005,525807.0,,branch-misses:u,branch-misses,5851823.0,66.0,27.44,of all branches,ok
+323.58771800000005,3197.0,,L1-dcache-loads:u,l1-dcache-loads,5061759.0,57.0,nan,,ok
+323.58771800000005,756.0,,cache-references:u,cache-references,4997735.0,56.0,nan,,ok
+323.58771800000005,46.0,,cache-misses:u,cache-misses,4995662.0,56.0,6.08,of all cache refs,ok
+323.58771800000005,3329215.0,,stalled-cycles-frontend:u,stalled-cycles-frontend,2790905.0,31.0,17.6,frontend cycles idle,ok
+334.36726799999997,2630.0,,instructions:u,instructions,533946.0,100.0,0.04,insn per cycle,ok
+334.36726799999997,59870.0,,cycles:u,cycles,533946.0,100.0,nan,,ok
+334.36726799999997,540.0,,branches:u,branches,533946.0,100.0,nan,,ok
+334.36726799999997,71.0,,branch-misses:u,branch-misses,533946.0,100.0,13.15,of all branches,ok
+334.36726799999997,1785.0,,L1-dcache-loads:u,l1-dcache-loads,533946.0,100.0,nan,,ok
+334.36726799999997,nan,,cache-references:u,cache-references,0.0,0.0,nan,,ok
+334.36726799999997,nan,,cache-misses:u,cache-misses,0.0,0.0,nan,,ok
+334.36726799999997,nan,,stalled-cycles-frontend:u,stalled-cycles-frontend,0.0,0.0,nan,,ok
+345.007614,2630.0,,instructions:u,instructions,533311.0,100.0,0.03,insn per cycle,ok
+345.007614,91738.0,,cycles:u,cycles,533311.0,100.0,nan,,ok
+345.007614,540.0,,branches:u,branches,533311.0,100.0,nan,,ok
+345.007614,70.0,,branch-misses:u,branch-misses,533311.0,100.0,12.96,of all branches,ok
+345.007614,1749.0,,L1-dcache-loads:u,l1-dcache-loads,533311.0,100.0,nan,,ok
+345.007614,nan,,cache-references:u,cache-references,0.0,0.0,nan,,ok
+345.007614,nan,,cache-misses:u,cache-misses,0.0,0.0,nan,,ok
+345.007614,nan,,stalled-cycles-frontend:u,stalled-cycles-frontend,0.0,0.0,nan,,ok
+355.848464,1813408.0,,instructions:u,instructions,1014301.0,44.0,0.45,insn per cycle,ok
+355.848464,4034963.0,,cycles:u,cycles,2014963.0,88.0,nan,,ok
+355.848464,416543.0,,branches:u,branches,2311443.0,100.0,nan,,ok
+355.848464,114295.0,,branch-misses:u,branch-misses,2337813.0,100.0,27.44,of all branches,ok
+355.848464,2006.0,,L1-dcache-loads:u,l1-dcache-loads,2361824.0,100.0,nan,,ok
+355.848464,191.0,,cache-references:u,cache-references,1372177.0,57.0,nan,,ok
+355.848464,0.0,,cache-misses:u,cache-misses,394794.0,16.0,nan,,ok
+355.848464,nan,,stalled-cycles-frontend:u,stalled-cycles-frontend,0.0,0.0,nan,,ok
+366.557469,nan,,instructions:u,instructions,0.0,0.0,nan,,ok
+366.557469,nan,,cycles:u,cycles,0.0,0.0,nan,,ok
+366.557469,591389.0,,branches:u,branches,704508.0,20.0,nan,,ok
+366.557469,149347.0,,branch-misses:u,branch-misses,2327532.0,63.0,25.25,of all branches,ok
+366.557469,7065.0,,L1-dcache-loads:u,l1-dcache-loads,4297960.0,93.0,nan,,ok
+366.557469,2879.0,,cache-references:u,cache-references,4864261.0,100.0,nan,,ok
+366.557469,1139.0,,cache-misses:u,cache-misses,4840982.0,100.0,39.56,of all cache refs,ok
+366.557469,nan,,stalled-cycles-frontend:u,stalled-cycles-frontend,0.0,0.0,nan,,ok
+377.219092,nan,,instructions:u,instructions,0.0,100.0,nan,,ok
+377.219092,nan,,cycles:u,cycles,0.0,100.0,nan,,ok
+377.219092,nan,,branches:u,branches,0.0,100.0,nan,,ok
+377.219092,nan,,branch-misses:u,branch-misses,0.0,100.0,nan,,ok
+377.219092,nan,,L1-dcache-loads:u,l1-dcache-loads,0.0,100.0,nan,,ok
+377.219092,nan,,cache-references:u,cache-references,0.0,100.0,nan,,ok
+377.219092,nan,,cache-misses:u,cache-misses,0.0,100.0,nan,,ok
+377.219092,nan,,stalled-cycles-frontend:u,stalled-cycles-frontend,0.0,100.0,nan,,ok
+386.084949,nan,,instructions:u,instructions,0.0,100.0,nan,,ok
+386.084949,nan,,cycles:u,cycles,0.0,100.0,nan,,ok
+386.084949,nan,,branches:u,branches,0.0,100.0,nan,,ok
+386.084949,0.0,,branch-misses:u,branch-misses,148655.0,100.0,nan,,ok
+386.084949,0.0,,L1-dcache-loads:u,l1-dcache-loads,148655.0,100.0,nan,,ok
+386.084949,0.0,,cache-references:u,cache-references,148655.0,100.0,nan,,ok
+386.084949,0.0,,cache-misses:u,cache-misses,148655.0,100.0,nan,,ok
+386.084949,nan,,stalled-cycles-frontend:u,stalled-cycles-frontend,0.0,100.0,nan,,ok

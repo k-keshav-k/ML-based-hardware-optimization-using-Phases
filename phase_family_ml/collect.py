@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import subprocess
 import sys
 import time
 import uuid
@@ -31,6 +32,7 @@ EXPERIMENT_SET_NAMES = {
 }
 
 DEFAULT_PARSEC_STRICT_WORKLOADS = ["blackscholes", "bodytrack", "canneal", "fluidanimate", "freqmine"]
+DEFAULT_FINALS_DATASET_ROOT = Path("/scratch/kk6081/finals_dataset")
 
 FAMILY_LM_COUNTER_FAMILIES = [
     "instructions_retired",
@@ -181,6 +183,7 @@ def make_task(
         "uncore_events": context["uncore_event_specs"],
         "collect_uncore": context["collect_uncore"],
         "experiment_set": experiment_set,
+        "set_key": next((key for key, value in EXPERIMENT_SET_NAMES.items() if value == experiment_set), ""),
         "rep": rep,
         "concurrent_group_id": concurrent_group_id,
         "process_index": process_index,
@@ -189,7 +192,7 @@ def make_task(
         "collection_scope": context["core_collection_scope"],
         "core_collection_scope": context["core_collection_scope"],
         "cpu_topology": platform.get("cpu_topology", {}),
-    }
+}
     env = dict(os.environ)
     env["PARSECDIR"] = str(platform["parsec"]["root"])
     return {
@@ -228,6 +231,7 @@ def run_one_task(task: dict[str, object]) -> dict[str, object]:
     write_json(run_dir / "collection_results.json", results)
     return {
         "run_id": task["metadata"]["run_id"],
+        "set_key": task["metadata"].get("set_key", ""),
         "run_dir": str(run_dir),
         "returncode": results.get("interval_returncode"),
         "issues": results.get("issues", []),
@@ -249,11 +253,11 @@ def build_tasks(args: argparse.Namespace, context: dict[str, object]) -> list[di
     if not workloads:
         raise SystemExit("No requested PARSEC workloads were detected.")
     available_cpus = list(platform["online_cpus"])
-    output_dir = ensure_dir(Path(args.output_dir))
     sets = listify_csv_argument(args.sets)
     tasks: list[dict[str, object]] = []
     for rep in range(1, args.reps + 1):
         if "set1" in sets:
+            output_dir = raw_output_dir_for_set(args, "set1")
             for workload in workloads:
                 for threads in parse_int_list(args.set1_threads):
                     [affinity] = affinity_groups(available_cpus, [threads])
@@ -275,6 +279,7 @@ def build_tasks(args: argparse.Namespace, context: dict[str, object]) -> list[di
                         )
                     )
         if "set2" in sets:
+            output_dir = raw_output_dir_for_set(args, "set2")
             for group_index, group in enumerate(chunked(workloads, args.group_size), start=1):
                 if len(group) < 2:
                     continue
@@ -299,6 +304,7 @@ def build_tasks(args: argparse.Namespace, context: dict[str, object]) -> list[di
                         )
                     )
         if "set3" in sets:
+            output_dir = raw_output_dir_for_set(args, "set3")
             for group_index, group in enumerate(chunked(workloads, args.group_size), start=1):
                 if len(group) < 2:
                     continue
@@ -326,6 +332,111 @@ def build_tasks(args: argparse.Namespace, context: dict[str, object]) -> list[di
     return tasks
 
 
+def use_finals_layout(args: argparse.Namespace) -> bool:
+    return not bool(str(args.output_dir).strip())
+
+
+def set_root(args: argparse.Namespace, set_key: str) -> Path:
+    return ensure_dir(Path(args.dataset_root) / set_key)
+
+
+def raw_output_dir_for_set(args: argparse.Namespace, set_key: str) -> Path:
+    if use_finals_layout(args):
+        return ensure_dir(set_root(args, set_key) / "raw")
+    return ensure_dir(Path(args.output_dir))
+
+
+def processed_dir_for_set(args: argparse.Namespace, set_key: str) -> Path:
+    return ensure_dir(set_root(args, set_key) / "processed")
+
+
+def results_dir_for_set(args: argparse.Namespace, set_key: str) -> Path:
+    return ensure_dir(set_root(args, set_key) / "results" / "phase_family_ml")
+
+
+def tasks_by_set(tasks: list[dict[str, object]]) -> dict[str, list[dict[str, object]]]:
+    grouped: dict[str, list[dict[str, object]]] = {}
+    for task in tasks:
+        metadata = dict(task["metadata"])
+        set_key = str(metadata.get("set_key", "")).strip()
+        if set_key:
+            grouped.setdefault(set_key, []).append(task)
+    return grouped
+
+
+def write_collection_manifests(args: argparse.Namespace, tasks: list[dict[str, object]]) -> dict[str, Path]:
+    if not use_finals_layout(args):
+        manifest_path = Path(args.output_dir) / "phase_family_ml_experiment_manifest.json"
+        write_json(manifest_path, [task["metadata"] for task in tasks])
+        return {"all": manifest_path}
+    output: dict[str, Path] = {}
+    for set_key, set_tasks in tasks_by_set(tasks).items():
+        manifest_path = raw_output_dir_for_set(args, set_key) / "phase_family_ml_experiment_manifest.json"
+        write_json(manifest_path, [task["metadata"] for task in set_tasks])
+        output[set_key] = manifest_path
+    return output
+
+
+def write_collection_results(args: argparse.Namespace, results: list[dict[str, object]]) -> None:
+    if not use_finals_layout(args):
+        write_json(Path(args.output_dir) / "phase_family_ml_experiment_results.json", results)
+        return
+    grouped: dict[str, list[dict[str, object]]] = {}
+    for item in results:
+        set_key = str(item.get("set_key", "")).strip()
+        if set_key:
+            grouped.setdefault(set_key, []).append(item)
+    for set_key, rows in grouped.items():
+        write_json(raw_output_dir_for_set(args, set_key) / "phase_family_ml_experiment_results.json", rows)
+
+
+def run_checked(command: list[str], cwd: Path) -> None:
+    print("[postprocess] " + " ".join(command), file=sys.stderr, flush=True)
+    result = subprocess.run(command, cwd=str(cwd), text=True, check=False)
+    if result.returncode != 0:
+        raise SystemExit(f"Postprocess command failed with exit code {result.returncode}: {' '.join(command)}")
+
+
+def run_set_postprocess(args: argparse.Namespace, set_keys: list[str]) -> None:
+    if not use_finals_layout(args) or args.skip_postprocess:
+        return
+    project_root = PROJECT_ROOT
+    for set_key in set_keys:
+        raw_dir = raw_output_dir_for_set(args, set_key)
+        processed_dir = processed_dir_for_set(args, set_key)
+        results_dir = results_dir_for_set(args, set_key)
+        manifest_path = raw_dir / "phase_family_ml_experiment_manifest.json"
+        run_checked(
+            [
+                sys.executable,
+                "scripts/merge_runs.py",
+                "--input-dir",
+                str(raw_dir),
+                "--output-dir",
+                str(processed_dir),
+                "--manifest-path",
+                str(manifest_path),
+            ],
+            project_root,
+        )
+        run_checked(
+            [
+                sys.executable,
+                "-m",
+                "phase_family_ml.run_pipeline",
+                "--config",
+                str(args.pipeline_config),
+                "--input",
+                str(processed_dir / "merged_interval_dataset.csv"),
+                "--output-dir",
+                str(results_dir),
+                "--experiment-mode",
+                str(args.experiment_mode),
+            ],
+            project_root,
+        )
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--sets", default="set1,set2,set3")
@@ -333,10 +444,14 @@ def main() -> None:
     parser.add_argument("--reps", type=int, default=3)
     parser.add_argument("--interval-ms", type=int, default=DEFAULT_INTERVAL_MS)
     parser.add_argument("--parsec-input", default="test")
-    parser.add_argument("--output-dir", default=str(PROJECT_ROOT / "results" / "raw_phase_family_ml_experiments"))
+    parser.add_argument("--dataset-root", default=str(DEFAULT_FINALS_DATASET_ROOT))
+    parser.add_argument("--output-dir", default="")
     parser.add_argument("--set1-threads", default="2,4,8")
     parser.add_argument("--group-size", type=int, default=2)
     parser.add_argument("--hybrid-threads", type=int, default=2)
+    parser.add_argument("--pipeline-config", default=str(PROJECT_ROOT / "config" / "phase_family_ml_defaults.json"))
+    parser.add_argument("--experiment-mode", choices=["per_workload_holdout", "pooled_run_group", "config_group_holdout", "leave_one_workload_out", "all"], default="config_group_holdout")
+    parser.add_argument("--skip-postprocess", action="store_true")
     parser.add_argument("--core-collection-scope", default="task_local", choices=["task_local", "system_wide_cpu", "system_wide_physical_core"])
     parser.add_argument("--collect-uncore", dest="collect_uncore", action="store_true")
     parser.add_argument("--no-collect-uncore", dest="collect_uncore", action="store_false")
@@ -346,11 +461,19 @@ def main() -> None:
 
     context = build_common_context(args)
     tasks = build_tasks(args, context)
-    manifest = [task["metadata"] for task in tasks]
-    manifest_path = Path(args.output_dir) / "phase_family_ml_experiment_manifest.json"
-    write_json(manifest_path, manifest)
+    manifest_paths = write_collection_manifests(args, tasks)
     if args.dry_run:
-        print(json.dumps({"tasks": len(tasks), "manifest": str(manifest_path)}, indent=2))
+        print(
+            json.dumps(
+                {
+                    "tasks": len(tasks),
+                    "dataset_root": str(args.dataset_root) if use_finals_layout(args) else "",
+                    "manifests": {key: str(path) for key, path in manifest_paths.items()},
+                    "postprocess": bool(use_finals_layout(args) and not args.skip_postprocess),
+                },
+                indent=2,
+            )
+        )
         return
 
     results = []
@@ -381,9 +504,22 @@ def main() -> None:
                     file=sys.stderr,
                     flush=True,
                 )
-    write_json(Path(args.output_dir) / "phase_family_ml_experiment_results.json", results)
+    write_collection_results(args, results)
     failed_runs = [item for item in results if item.get("returncode") not in (0, None)]
-    print(json.dumps({"runs": len(results), "failed": len(failed_runs), "manifest": str(manifest_path)}, indent=2))
+    if not failed_runs:
+        run_set_postprocess(args, sorted(tasks_by_set(tasks).keys()))
+    print(
+        json.dumps(
+            {
+                "runs": len(results),
+                "failed": len(failed_runs),
+                "dataset_root": str(args.dataset_root) if use_finals_layout(args) else "",
+                "manifests": {key: str(path) for key, path in manifest_paths.items()},
+                "postprocess": bool(use_finals_layout(args) and not args.skip_postprocess and not failed_runs),
+            },
+            indent=2,
+        )
+    )
 
 
 if __name__ == "__main__":

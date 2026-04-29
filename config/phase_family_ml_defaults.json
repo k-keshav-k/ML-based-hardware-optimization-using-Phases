@@ -2,7 +2,7 @@
   "random_seed": 17,
   "dataset": {
     "input_csv": "results/processed/merged_interval_dataset.csv",
-    "output_dir": "/scratch/kk6081/results/phase_family_ml",
+    "output_dir": "/scratch/kk6081/set2/results/phase_family_ml",
     "horizon": 1,
     "history_length": 16
   },
@@ -54,6 +54,13 @@
     "run_length_buckets": [1, 3, 7, 15],
     "synthetic_examples_per_family": 20000,
     "synthetic_mutation_rate": 0.05
+  },
+  "phase_detector": {
+    "history_length": 20,
+    "prediction_horizon": 5,
+    "decision_tree_max_depth": 6,
+    "decision_tree_min_samples_leaf": 8,
+    "depth_sweep_depths": []
   },
   "experiments": {
     "modes": ["config_group_holdout"],

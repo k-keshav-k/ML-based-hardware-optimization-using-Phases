@@ -1,0 +1,3 @@
+group_id,candidate_indicators,representative_to_keep,indicators_to_drop,reason
+G01,"norm__cycles_per_ms, norm__instructions_retired_per_ms",norm__cycles_per_ms,norm__instructions_retired_per_ms,Selected for higher portability/interpretability and lower missingness; max within-group |rho|=0.976
+G02,"norm__llc_references_per_ki, norm__offcore_demand_data_reads_per_ki",norm__llc_references_per_ki,norm__offcore_demand_data_reads_per_ki,Selected for higher portability/interpretability and lower missingness; max within-group |rho|=0.976

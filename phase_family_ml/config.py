@@ -67,6 +67,13 @@ DEFAULT_FAMILY_ML_CONFIG: dict[str, Any] = {
         "synthetic_examples_per_family": 20000,
         "synthetic_mutation_rate": 0.05,
     },
+    "phase_detector": {
+        "history_length": 20,
+        "prediction_horizon": 5,
+        "decision_tree_max_depth": 6,
+        "decision_tree_min_samples_leaf": 8,
+        "depth_sweep_depths": [],
+    },
     "experiments": {
         "modes": ["config_group_holdout"],
         "default_mode": "config_group_holdout",

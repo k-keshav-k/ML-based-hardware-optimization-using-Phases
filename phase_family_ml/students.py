@@ -225,7 +225,6 @@ def _teacher_checkpoint_path(teacher_predictions_path: Path, family: str) -> Pat
 def _predict_teacher_checkpoint(checkpoint_path: Path, x: np.ndarray, batch_size: int = 1024) -> np.ndarray:
     torch, _ = require_torch()
     checkpoint = torch.load(checkpoint_path, map_location="cpu")
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model = build_family_transformer(
         input_dim=int(checkpoint["input_dim"]),
         horizon=int(checkpoint["horizon"]),
@@ -233,12 +232,12 @@ def _predict_teacher_checkpoint(checkpoint_path: Path, x: np.ndarray, batch_size
         config=dict(checkpoint["config"]),
     )
     model.load_state_dict(checkpoint["state_dict"])
-    model.to(device)
     model.eval()
+    print(f"[students] synthetic_teacher_inference device=cpu checkpoint={checkpoint_path} rows={x.shape[0]}", flush=True)
     parts: list[np.ndarray] = []
     with torch.no_grad():
         for start in range(0, x.shape[0], batch_size):
-            xb = torch.tensor(x[start : start + batch_size], dtype=torch.float32, device=device)
+            xb = torch.tensor(x[start : start + batch_size], dtype=torch.float32)
             parts.append(model(xb).argmax(dim=2).cpu().numpy().astype(int))
     return np.concatenate(parts, axis=0) if parts else np.empty((0, int(checkpoint["horizon"])), dtype=int)
 
@@ -283,7 +282,12 @@ def train_students_for_experiment(
     family_data = load_scope_family_data(experiment_dir, scope, horizon)
     families, current, future, split, metadata_rows = states_matrix(family_data, horizon)
     if not families:
+        print(f"[students] experiment={experiment_dir.name} scope={scope} skipped=no_families", flush=True)
         return []
+    print(
+        f"[students] experiment={experiment_dir.name} scope={scope} families={len(families)} rows={current.shape[0]}",
+        flush=True,
+    )
     hard_teacher, soft_teacher = _teacher_tables(teacher_predictions_path, horizon)
     context_modes = _family_context_modes(teacher_predictions_path)
     eval_mask = _eval_mask(split)
@@ -292,6 +296,7 @@ def train_students_for_experiment(
     prediction_rows: list[dict[str, object]] = []
 
     for family_index, family in enumerate(families):
+        print(f"[students] family={family} start", flush=True)
         row_indices = np.arange(current.shape[0], dtype=int)
         cur, prev, run_len, context_hash = _temporal_features(current, metadata_rows, family_index)
         # Core cheap student features.
@@ -367,6 +372,11 @@ def train_students_for_experiment(
                 "lookup_entries": int(len(np.unique(np.c_[cur, prev, run_len, context_hash], axis=0))),
             }
         )
+        print(
+            f"[students] family={family} run_length_models_done "
+            f"tree_retention={tree_ret:.4f} lookup_retention={lookup_ret:.4f}",
+            flush=True,
+        )
 
         context_mode = context_modes.get(family, "without_context")
         x_hist, y_hist, split_hist, current_hist, meta_hist, row_ids_hist = _build_examples(
@@ -394,6 +404,11 @@ def train_students_for_experiment(
             synthetic_x = np.empty((0,) + x_hist.shape[1:], dtype=float)
             synthetic_pred = np.empty((0, horizon), dtype=int)
             if synthetic_examples_per_family > 0 and checkpoint_path.exists():
+                print(
+                    f"[students] family={family} synthetic_histories={synthetic_examples_per_family} "
+                    f"mutation_rate={synthetic_mutation_rate}",
+                    flush=True,
+                )
                 synthetic_x = _synthetic_histories(
                     x_hist[train_hist],
                     synthetic_examples_per_family,
@@ -412,6 +427,7 @@ def train_students_for_experiment(
             lookup_entries_by_step: list[int] = []
 
             for step in range(1, horizon + 1):
+                print(f"[students] family={family} history_step={step} start", flush=True)
                 true_target = y_hist[:, step - 1].astype(int)
                 valid_true = true_target >= 0
                 scratch_fit = train_hist & valid_true
@@ -443,6 +459,7 @@ def train_students_for_experiment(
                         synthetic_tree = DecisionTree(max_depth=tree_max_depth, min_samples_leaf=tree_min_leaf)
                         synthetic_tree.fit(combined_x, combined_y)
                         hist_preds["synthetic_distilled_history_tree"][:, step - 1] = synthetic_tree.predict(hist_features)
+                print(f"[students] family={family} history_step={step} done", flush=True)
 
             teacher_h1, valid_teacher_h1 = _teacher_targets(family, row_ids_hist, 1, hard_teacher)
             for model_name, preds in hist_preds.items():
@@ -465,6 +482,7 @@ def train_students_for_experiment(
                         "lookup_entries": max(lookup_entries_by_step) if model_name == "lookup_distilled_history" and lookup_entries_by_step else "",
                     }
                 )
+            print(f"[students] family={family} history_models_done models={len(hist_preds)}", flush=True)
 
             for i, row in enumerate(meta_hist):
                 base = {
@@ -486,6 +504,8 @@ def train_students_for_experiment(
                         item[f"y_true_future_state_{step}"] = int(y_hist[i, step - 1])
                         item[f"y_pred_future_state_{step}"] = int(preds[i, step - 1])
                     prediction_rows.append(item)
+        else:
+            print(f"[students] family={family} skipped_history_models=no_examples", flush=True)
 
         for i, row in enumerate(metadata_rows):
             base = {
@@ -510,6 +530,7 @@ def train_students_for_experiment(
                 lookup_row[f"y_pred_future_state_{step}"] = int(lookup_preds[i, step - 1])
             prediction_rows.append(tree_row)
             prediction_rows.append(lookup_row)
+        print(f"[students] family={family} done", flush=True)
 
     write_csv_rows(output_dir / "student_predictions.csv", prediction_rows)
     write_csv_rows(output_dir / "student_summary.csv", summary_rows)

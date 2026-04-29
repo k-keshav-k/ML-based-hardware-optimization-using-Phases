@@ -1,0 +1,501 @@
+% Options for packages loaded elsewhere
+\PassOptionsToPackage{unicode}{hyperref}
+\PassOptionsToPackage{hyphens}{url}
+%
+\documentclass[
+]{article}
+\author{}
+\date{}
+
+\usepackage{amsmath,amssymb}
+\usepackage{lmodern}
+\usepackage{iftex}
+\ifPDFTeX
+  \usepackage[T1]{fontenc}
+  \usepackage[utf8]{inputenc}
+  \usepackage{textcomp} % provide euro and other symbols
+\else % if luatex or xetex
+  \usepackage{unicode-math}
+  \defaultfontfeatures{Scale=MatchLowercase}
+  \defaultfontfeatures[\rmfamily]{Ligatures=TeX,Scale=1}
+\fi
+% Use upquote if available, for straight quotes in verbatim environments
+\IfFileExists{upquote.sty}{\usepackage{upquote}}{}
+\IfFileExists{microtype.sty}{% use microtype if available
+  \usepackage[]{microtype}
+  \UseMicrotypeSet[protrusion]{basicmath} % disable protrusion for tt fonts
+}{}
+\makeatletter
+\@ifundefined{KOMAClassName}{% if non-KOMA class
+  \IfFileExists{parskip.sty}{%
+    \usepackage{parskip}
+  }{% else
+    \setlength{\parindent}{0pt}
+    \setlength{\parskip}{6pt plus 2pt minus 1pt}}
+}{% if KOMA class
+  \KOMAoptions{parskip=half}}
+\makeatother
+\usepackage{xcolor}
+\IfFileExists{xurl.sty}{\usepackage{xurl}}{} % add URL line breaks if available
+\IfFileExists{bookmark.sty}{\usepackage{bookmark}}{\usepackage{hyperref}}
+\hypersetup{
+  hidelinks,
+  pdfcreator={LaTeX via pandoc}}
+\urlstyle{same} % disable monospaced font for URLs
+\usepackage{longtable,booktabs,array}
+\usepackage{calc} % for calculating minipage widths
+% Correct order of tables after \paragraph or \subparagraph
+\usepackage{etoolbox}
+\makeatletter
+\patchcmd\longtable{\par}{\if@noskipsec\mbox{}\fi\par}{}{}
+\makeatother
+% Allow footnotes in longtable head/foot
+\IfFileExists{footnotehyper.sty}{\usepackage{footnotehyper}}{\usepackage{footnote}}
+\makesavenoteenv{longtable}
+\usepackage{graphicx}
+\makeatletter
+\def\maxwidth{\ifdim\Gin@nat@width>\linewidth\linewidth\else\Gin@nat@width\fi}
+\def\maxheight{\ifdim\Gin@nat@height>\textheight\textheight\else\Gin@nat@height\fi}
+\makeatother
+% Scale images if necessary, so that they will not overflow the page
+% margins by default, and it is still possible to overwrite the defaults
+% using explicit options in \includegraphics[width, height, ...]{}
+\setkeys{Gin}{width=\maxwidth,height=\maxheight,keepaspectratio}
+% Set default figure placement to htbp
+\makeatletter
+\def\fps@figure{htbp}
+\makeatother
+\setlength{\emergencystretch}{3em} % prevent overfull lines
+\providecommand{\tightlist}{%
+  \setlength{\itemsep}{0pt}\setlength{\parskip}{0pt}}
+\setcounter{secnumdepth}{-\maxdimen} % remove section numbering
+\ifLuaTeX
+  \usepackage{selnolig}  % disable illegal ligatures
+\fi
+
+\begin{document}
+
+\hypertarget{multicore-hardware-counter-correlation-study}{%
+\section{Multicore Hardware Counter Correlation
+Study}\label{multicore-hardware-counter-correlation-study}}
+
+\hypertarget{executive-summary}{%
+\subsection{Executive Summary}\label{executive-summary}}
+
+This project collects Linux performance-counter measurements, aligns
+them with workload metadata and, when available, synthetic phase labels,
+and studies correlation structure to identify redundant indicators. The
+main recommendation workflow prefers the normalized Spearman view
+because raw counters often correlate simply because total activity rose
+across a sample, not because two indicators capture the same underlying
+behavior. On this machine, the generated artifact is based on PARSEC
+workloads collected through \texttt{parsecmgmt}.
+
+\hypertarget{objective}{%
+\subsection{Objective}\label{objective}}
+
+Determine which hardware indicators are highly correlated or redundant
+so a later phase-classification and phase-prediction pipeline can rely
+on a smaller, cheaper, and more portable counter set.
+
+\hypertarget{experimental-setup}{%
+\subsection{Experimental Setup}\label{experimental-setup}}
+
+\begin{itemize}
+\tightlist
+\item
+  CPU vendor/model: \texttt{GenuineIntel} /
+  \texttt{Intel(R)\ Xeon(R)\ CPU\ E5-2680\ v2\ @\ 2.80GHz}
+\item
+  Architecture: \texttt{x86\_64}
+\item
+  Logical CPUs: \texttt{20}
+\item
+  Sockets: \texttt{2}
+\item
+  Cores per socket: \texttt{10}
+\item
+  Perf version: \texttt{perf\ version\ 5.14.0-611.47.1.el9\_7.x86\_64}
+\item
+  Intel PCM available: \texttt{False}
+\item
+  CPU family/model id: \texttt{6} / \texttt{62}
+\item
+  Strict core PMU study ready: \texttt{True}
+\item
+  Uncore IMC study ready: \texttt{False}
+\end{itemize}
+
+\hypertarget{workload-generation}{%
+\subsection{Workload Generation}\label{workload-generation}}
+
+\begin{itemize}
+\tightlist
+\item
+  Suites in this generated artifact: \texttt{parsec}.
+\item
+  PARSEC available on this host: \texttt{True}. SPEC CPU2017 available
+  on this host: \texttt{False}.
+\item
+  Workloads executed:
+  \texttt{blackscholes,\ bodytrack,\ canneal,\ fluidanimate,\ freqmine}.
+\item
+  Thread counts executed: \texttt{1,\ 2,\ 4,\ 8}.
+\item
+  Repetitions per workload/thread combination: \texttt{3}.
+\item
+  Target collection interval: \texttt{10\ ms}.
+\item
+  PARSEC input sizes used: \texttt{test}.
+\item
+  Observed perf-wrapped interval collection wall time:
+  \texttt{1594.8\ ms\ median\ (1193.0\ min,\ 2550.9\ max)}.
+\item
+  Affinity policy: Pinned with \texttt{taskset} to the first N online
+  CPUs for the requested thread count.
+\item
+  \texttt{parsec} workload generation: standard PARSEC applications and
+  kernels launched through \texttt{parsecmgmt} with taskset-based CPU
+  affinity and the configured PARSEC input set.
+\end{itemize}
+
+\hypertarget{event-mapping-table}{%
+\subsection{Event Mapping Table}\label{event-mapping-table}}
+
+\begin{longtable}[]{@{}
+  >{\raggedright\arraybackslash}p{(\columnwidth - 6\tabcolsep) * \real{0.25}}
+  >{\raggedright\arraybackslash}p{(\columnwidth - 6\tabcolsep) * \real{0.25}}
+  >{\raggedright\arraybackslash}p{(\columnwidth - 6\tabcolsep) * \real{0.25}}
+  >{\raggedright\arraybackslash}p{(\columnwidth - 6\tabcolsep) * \real{0.25}}@{}}
+\toprule
+\begin{minipage}[b]{\linewidth}\raggedright
+Family
+\end{minipage} & \begin{minipage}[b]{\linewidth}\raggedright
+Selected Event
+\end{minipage} & \begin{minipage}[b]{\linewidth}\raggedright
+Supported
+\end{minipage} & \begin{minipage}[b]{\linewidth}\raggedright
+Note
+\end{minipage} \\
+\midrule
+\endhead
+Branch instructions & br\_inst\_retired.all\_branches & Yes & Using
+preferred host event \\
+Branch mispredictions & br\_misp\_retired.all\_branches & Yes & Using
+preferred host event \\
+Cycles & cpu\_clk\_unhalted.thread & Yes & Using preferred host event \\
+Instructions retired & inst\_retired.any & Yes & Using preferred host
+event \\
+L1 data loads & mem\_uops\_retired.all\_loads & Yes & Using preferred
+host event \\
+L1 data stores & mem\_uops\_retired.all\_stores & Yes & Using preferred
+host event \\
+LLC misses & longest\_lat\_cache.miss & Yes & Using preferred host
+event \\
+LLC references & longest\_lat\_cache.reference & Yes & Using preferred
+host event \\
+Memory read bandwidth & uncore\_imc/cas\_count\_read/ & Yes & Preferred
+Intel uncore IMC event (system-wide) \\
+Memory write bandwidth & uncore\_imc/cas\_count\_write/ & Yes &
+Preferred Intel uncore IMC event (system-wide) \\
+Off-core / DRAM demand reads & offcore\_requests.demand\_data\_rd & Yes
+& Using preferred host event \\
+Resource stalls & resource\_stalls.any & Yes & Using preferred host
+event \\
+Total memory bandwidth & derived\_total\_memory\_bandwidth & Yes &
+Derived from system-wide Intel uncore IMC read+write \\
+\bottomrule
+\end{longtable}
+
+\begin{itemize}
+\tightlist
+\item
+  Confident counters retained for analysis:
+  \texttt{Branch\ instructions,\ Branch\ mispredictions,\ Cycles,\ Instructions\ retired,\ L1\ data\ loads,\ L1\ data\ stores,\ LLC\ misses,\ LLC\ references,\ Off-core\ /\ DRAM\ demand\ reads,\ Resource\ stalls}.
+\item
+  Confident counters exposed on this host:
+  \texttt{Branch\ instructions,\ Branch\ mispredictions,\ Cycles,\ Instructions\ retired,\ L1\ data\ loads,\ L1\ data\ stores,\ LLC\ misses,\ LLC\ references,\ Memory\ read\ bandwidth,\ Memory\ write\ bandwidth,\ Off-core\ /\ DRAM\ demand\ reads,\ Resource\ stalls,\ Total\ memory\ bandwidth}.
+\item
+  Generic fallback counters excluded from analysis: \texttt{none}.
+\item
+  Unsupported counter families excluded from analysis:
+  \texttt{Floating-point\ arithmetic,\ L2\ misses}.
+\item
+  Missing required strict-study families: \texttt{none}.
+\item
+  Uncore readiness note:
+  \texttt{System-wide\ perf\ is\ blocked\ on\ this\ host.\ perf\_event\_paranoid=2;\ lower\ it\ or\ grant\ perf\ capability\ for\ uncore\ collection.}.
+\end{itemize}
+
+\hypertarget{dataset-summary}{%
+\subsection{Dataset Summary}\label{dataset-summary}}
+
+\begin{longtable}[]{@{}ll@{}}
+\toprule
+Statistic & Value \\
+\midrule
+\endhead
+Interval rows & 9409 \\
+Aggregate rows & 0 \\
+Runs merged & 60 \\
+Manifest runs & 60 \\
+Stale raw runs excluded & 213 \\
+Observed raw counter columns & 10 \\
+Confident counter columns kept & 10 \\
+Generic fallback columns excluded & 0 \\
+Columns removed as constant & 0 \\
+Strict core PMU study ready & Yes \\
+Uncore IMC study ready & No \\
+Uncore blocked by host policy & Yes \\
+Observed system-wide uncore columns & 0 \\
+\bottomrule
+\end{longtable}
+
+\hypertarget{preprocessing-and-derived-metrics}{%
+\subsection{Preprocessing and Derived
+Metrics}\label{preprocessing-and-derived-metrics}}
+
+The preprocessing stage handles missing values with median imputation
+after logging missingness, removes constant columns, creates raw and
+winsorized views, and derives CPI, IPC, MPKI-style cache/branch/off-core
+metrics, and FP intensity metrics. Raw-counter and normalized-counter
+views are intentionally separated because raw counts are strongly
+scale-sensitive. For normalized and derived analysis views, samples with
+non-positive interval duration, instructions retired, or cycles are
+excluded to avoid startup/shutdown artifacts.
+
+\begin{itemize}
+\tightlist
+\item
+  Analysis-ready rows kept: \texttt{9306} of \texttt{9409}.
+\item
+  Dropped rows: \texttt{103}.
+\item
+  Drop reasons:
+  \texttt{non\ positive\ cycles:\ 100,\ non\ positive\ instructions\ retired:\ 100,\ non\ positive\ interval\ duration\ ms:\ 0}.
+\end{itemize}
+
+\hypertarget{global-correlation-results}{%
+\subsection{Global Correlation
+Results}\label{global-correlation-results}}
+
+Raw counters show which indicators move together at the absolute-count
+level, but these relationships may largely reflect workload intensity.
+Normalized counters reduce that effect and are the better basis for
+redundancy decisions. This Xeon host exposes Intel uncore IMC PMUs, but
+system-wide collection is currently blocked by host policy, so the
+present artifact reflects confident core PMU analysis only.
+
+\hypertarget{raw-pearson-heatmap}{%
+\subsubsection{Raw Pearson Heatmap}\label{raw-pearson-heatmap}}
+
+\begin{figure}
+\centering
+\includegraphics{../tables/raw/pearson_heatmap.png}
+\caption{Raw Pearson Heatmap}
+\end{figure}
+
+\hypertarget{raw-spearman-heatmap}{%
+\subsubsection{Raw Spearman Heatmap}\label{raw-spearman-heatmap}}
+
+\begin{figure}
+\centering
+\includegraphics{../tables/raw/spearman_heatmap.png}
+\caption{Raw Spearman Heatmap}
+\end{figure}
+
+\hypertarget{normalized-pearson-heatmap}{%
+\subsubsection{Normalized Pearson
+Heatmap}\label{normalized-pearson-heatmap}}
+
+\begin{figure}
+\centering
+\includegraphics{../tables/normalized/pearson_heatmap.png}
+\caption{Normalized Pearson Heatmap}
+\end{figure}
+
+\hypertarget{normalized-spearman-heatmap}{%
+\subsubsection{Normalized Spearman
+Heatmap}\label{normalized-spearman-heatmap}}
+
+\begin{figure}
+\centering
+\includegraphics{../tables/normalized/spearman_heatmap.png}
+\caption{Normalized Spearman Heatmap}
+\end{figure}
+
+\hypertarget{clustered-heatmap}{%
+\subsubsection{Clustered Heatmap}\label{clustered-heatmap}}
+
+\begin{figure}
+\centering
+\includegraphics{../tables/normalized/clustered_heatmap.png}
+\caption{Clustered Heatmap}
+\end{figure}
+
+\hypertarget{dendrogram}{%
+\subsubsection{Dendrogram}\label{dendrogram}}
+
+\begin{figure}
+\centering
+\includegraphics{../tables/normalized/dendrogram.png}
+\caption{Dendrogram}
+\end{figure}
+
+\hypertarget{stratified-results}{%
+\subsection{Stratified Results}\label{stratified-results}}
+
+Stratified analysis is emitted by workload and thread count when enough
+samples exist. Without explicit phase labels, workload-local stability
+is the main check on whether redundancy patterns persist across
+applications.
+
+\hypertarget{top-positive-and-negative-correlations}{%
+\subsubsection{Top Positive and Negative
+Correlations}\label{top-positive-and-negative-correlations}}
+
+\begin{figure}
+\centering
+\includegraphics{../tables/normalized/top_correlations.png}
+\caption{Top Positive and Negative Correlations}
+\end{figure}
+
+\hypertarget{multicollinearity-results}{%
+\subsection{Multicollinearity Results}\label{multicollinearity-results}}
+
+Variance inflation factors complement pairwise correlation: a counter
+can have moderate pairwise correlations but still be redundant when
+explained by several others together. VIF is therefore best used
+alongside correlation-threshold grouping instead of as a replacement.
+
+\hypertarget{vif-bar-chart}{%
+\subsubsection{VIF Bar Chart}\label{vif-bar-chart}}
+
+\begin{figure}
+\centering
+\includegraphics{../tables/normalized/vif.png}
+\caption{VIF Bar Chart}
+\end{figure}
+
+\hypertarget{feature-selection-recommendations}{%
+\subsection{Feature Selection
+Recommendations}\label{feature-selection-recommendations}}
+
+\hypertarget{g01}{%
+\subsubsection{G01}\label{g01}}
+
+\begin{itemize}
+\tightlist
+\item
+  Keep: \texttt{Cycles\ /\ ms}
+\item
+  Drop: Instructions retired / ms
+\item
+  Members: Cycles / ms, Instructions retired / ms
+\item
+  Reason: Selected for higher portability/interpretability and lower
+  missingness; max within-group \textbar rho\textbar=0.976
+\end{itemize}
+
+\hypertarget{g02}{%
+\subsubsection{G02}\label{g02}}
+
+\begin{itemize}
+\tightlist
+\item
+  Keep: \texttt{LLC\ references\ /\ KI}
+\item
+  Drop: Off-core / DRAM demand reads / KI
+\item
+  Members: LLC references / KI, Off-core / DRAM demand reads / KI
+\item
+  Reason: Selected for higher portability/interpretability and lower
+  missingness; max within-group \textbar rho\textbar=0.976
+\end{itemize}
+
+The full machine-readable recommendation table remains available in
+\texttt{../tables/recommendations.csv}.
+
+\hypertarget{limitations}{%
+\subsection{Limitations}\label{limitations}}
+
+\begin{itemize}
+\tightlist
+\item
+  Raw counters can correlate simply because all counts grow with
+  activity, sample duration, or thread count.
+\item
+  Vendor-specific PMU names differ substantially; unsupported counters
+  are logged and left blank.
+\item
+  Intel PCM support is best-effort because deployments vary by binary
+  name, permissions, and CLI syntax.
+\item
+  Per-core task-local attribution is limited without privileged
+  system-wide PMU access.
+\item
+  Intel uncore IMC bandwidth on this host requires system-wide perf
+  access; when \texttt{perf\_event\_paranoid} blocks that path, the
+  report explicitly omits those system-wide metrics.
+\end{itemize}
+
+\hypertarget{next-steps}{%
+\subsection{Next Steps}\label{next-steps}}
+
+\begin{itemize}
+\tightlist
+\item
+  Validate the recommended reduced set against a downstream phase
+  classifier or predictor.
+\item
+  Repeat the study on additional Intel, AMD, and Arm systems to compare
+  portability.
+\item
+  Extend the stratified analysis with application-specific phases from
+  PARSEC or SPEC CPU2017 when those suites are available.
+\item
+  Lower \texttt{perf\_event\_paranoid} or grant equivalent perf
+  capability on this Xeon host if you want IMC bandwidth collected
+  alongside the strict core PMU set.
+\end{itemize}
+
+\hypertarget{appendix}{%
+\subsection{Appendix}\label{appendix}}
+
+\begin{itemize}
+\tightlist
+\item
+  Raw indicators analyzed:
+  \texttt{Instructions\ retired,\ Cycles,\ Branch\ instructions,\ Branch\ mispredictions,\ L1\ data\ loads,\ L1\ data\ stores,\ LLC\ references,\ LLC\ misses,\ Off-core\ /\ DRAM\ demand\ reads,\ Resource\ stalls}
+\item
+  Derived indicators analyzed: \texttt{6}
+\item
+  Counter families defined in the project:
+  \texttt{instructions\_retired,\ cycles,\ branch\_instructions,\ branch\_mispredictions,\ l1d\_loads,\ l1d\_stores,\ l2\_misses,\ llc\_references,\ llc\_misses,\ offcore\_demand\_data\_reads,\ fp\_arithmetic,\ resource\_stalls,\ memory\_read\_bandwidth,\ memory\_write\_bandwidth,\ total\_memory\_bandwidth}
+\end{itemize}
+
+\hypertarget{how-to-interpret-the-results}{%
+\subsection{How to interpret the
+results}\label{how-to-interpret-the-results}}
+
+\begin{itemize}
+\tightlist
+\item
+  Two counters are likely redundant when they remain highly correlated
+  in the normalized Spearman view and also appear in the same high-VIF
+  neighborhood.
+\item
+  Raw and normalized views can disagree because raw counts mix true
+  behavior with overall workload activity and duration scaling.
+\item
+  Use correlation to find pairwise or group redundancy, then use VIF to
+  see whether an indicator adds information once the rest of the set is
+  considered.
+\item
+  Choose a minimal portable counter set by preferring common counters
+  with low missingness and clear meaning, then dropping vendor-specific
+  counters only when a more portable representative preserves the same
+  signal.
+\end{itemize}
+
+\end{document}
