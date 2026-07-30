@@ -21,15 +21,15 @@ from phase_family_ml.labels import (
     states_for_scope,
     thresholds_for_family,
 )
+from phase_family_ml.metrics import grouped_bootstrap_confidence_intervals, grouped_bootstrap_paired_difference
+from phase_family_ml.robustness import adjusted_rand_index
 from phase_family_ml.students import HistoryLookupModel, LookupBackoffModel, train_students_for_experiment
 from phase_family_ml.teacher import _build_examples, train_teachers_for_experiment
-from phase_family_ml.train_phase_detector import (
-    run_phase_detector_depth_sweep_for_experiment,
-    train_phase_detector_for_experiment,
-)
+from phase_family_ml.train_phase_detector import train_phase_detector_for_experiment
 from phase_family_ml.transformer_model import build_family_transformer, require_torch
-from phase_family_ml.collect import family_lm_events, family_lm_readiness
+from phase_family_ml.collect import family_lm_events, family_lm_readiness, workload_groups
 from phase_family_ml.splits import build_experiment_splits
+from scripts.merge_runs import pmu_collection_quality_rows
 
 
 HEADER = [
@@ -164,6 +164,125 @@ class PhaseFamilyMLTests(unittest.TestCase):
             by_threads.setdefault(row["threads"], set()).add(split.split_by_run[row["run_id"]])
         self.assertTrue(all(len(values) == 1 for values in by_threads.values()))
 
+    def test_config_group_holdout_keeps_corunners_together(self) -> None:
+        rows = []
+        for pair_index, pair in enumerate([("a", "b"), ("a", "c"), ("b", "c")], start=1):
+            for rep in range(1, 4):
+                group_id = f"set2_r{rep}_g{pair_index}"
+                for process_index, workload in enumerate(pair):
+                    rows.append(
+                        {
+                            "run_id": f"{group_id}_{workload}",
+                            "concurrent_group_id": group_id,
+                            "workload": workload,
+                            "threads": str(process_index + 1),
+                            "experiment_set": "set2_multi_process_single_thread",
+                            "requested_input_size": "simlarge",
+                            "process_index": str(process_index),
+                            "process_count": "2",
+                            "co_running_workloads": ",".join(pair),
+                            "core_collection_scope": "system_wide_physical_core",
+                        }
+                    )
+        [split] = build_experiment_splits(rows, "config_group_holdout", 0.67, 0.0, 7)
+        by_pair: dict[str, set[str]] = {}
+        for row in rows:
+            by_pair.setdefault(row["co_running_workloads"], set()).add(split.split_by_run[row["run_id"]])
+        self.assertTrue(all(len(values) == 1 for values in by_pair.values()))
+
+    def test_pooled_and_workload_holdout_keep_execution_group_together(self) -> None:
+        rows = [
+            {
+                "run_id": "run_a",
+                "concurrent_group_id": "pair_1",
+                "workload": "a",
+                "co_running_workloads": "a,b",
+            },
+            {
+                "run_id": "run_b",
+                "concurrent_group_id": "pair_1",
+                "workload": "b",
+                "co_running_workloads": "a,b",
+            },
+            {
+                "run_id": "run_c",
+                "concurrent_group_id": "pair_2",
+                "workload": "c",
+                "co_running_workloads": "c,d",
+            },
+            {
+                "run_id": "run_d",
+                "concurrent_group_id": "pair_2",
+                "workload": "d",
+                "co_running_workloads": "c,d",
+            },
+        ]
+        [pooled] = build_experiment_splits(rows, "pooled_run_group", 0.5, 0.0, 7)
+        self.assertEqual(pooled.split_by_run["run_a"], pooled.split_by_run["run_b"])
+        self.assertEqual(pooled.split_by_run["run_c"], pooled.split_by_run["run_d"])
+
+        [stratified] = build_experiment_splits(rows, "per_workload_holdout", 0.5, 0.0, 7)
+        self.assertEqual(stratified.split_by_run["run_a"], stratified.split_by_run["run_b"])
+        self.assertEqual(stratified.split_by_run["run_c"], stratified.split_by_run["run_d"])
+
+        holdouts = build_experiment_splits(rows, "leave_one_workload_out", 0.7, 0.15, 7)
+        holdout_a = next(item for item in holdouts if item.name.endswith("__a"))
+        self.assertEqual(holdout_a.split_by_run["run_a"], "test")
+        self.assertEqual(holdout_a.split_by_run["run_b"], "test")
+
+    def test_publication_pairing_uses_all_combinations(self) -> None:
+        groups = workload_groups(["a", "b", "c", "d"], 2, "all_combinations")
+        self.assertEqual(len(groups), 6)
+        self.assertIn(["a", "d"], groups)
+        self.assertEqual(workload_groups(["a", "b", "c", "d"], 2, "chunked"), [["a", "b"], ["c", "d"]])
+
+    def test_grouped_bootstrap_reports_execution_group_uncertainty(self) -> None:
+        result = grouped_bootstrap_confidence_intervals(
+            np.asarray([0, 0, 1, 1, 2, 2]),
+            np.asarray([0, 0, 1, 0, 2, 1]),
+            np.asarray([0, 1, 1, 2, 2, 0]),
+            np.asarray(["g1", "g1", "g1", "g2", "g2", "g2"]),
+            n_resamples=200,
+            seed=3,
+        )
+        self.assertEqual(result["eval_group_count"], 2)
+        self.assertEqual(result["bootstrap_resamples"], 200)
+        self.assertLessEqual(result["accuracy_ci95_low"], result["accuracy_ci95_high"])
+        self.assertLessEqual(result["transition_accuracy_ci95_low"], result["transition_accuracy_ci95_high"])
+
+    def test_pmu_collection_quality_reports_multiplexing(self) -> None:
+        rows = [
+            {"pmu_enabled_pct__cycles": "100", "pmu_runtime_ns__cycles": "1000"},
+            {"pmu_enabled_pct__cycles": "80", "pmu_runtime_ns__cycles": "800"},
+            {"pmu_enabled_pct__cycles": "0", "pmu_runtime_ns__cycles": "0"},
+        ]
+        summary = pmu_collection_quality_rows(rows)
+        self.assertEqual(len(summary), 1)
+        self.assertEqual(summary[0]["counter_family"], "cycles")
+        self.assertAlmostEqual(float(summary[0]["enabled_pct_mean"]), 60.0)
+        self.assertAlmostEqual(float(summary[0]["fraction_enabled_below_90pct"]), 2.0 / 3.0)
+
+    def test_adjusted_rand_index_is_permutation_invariant(self) -> None:
+        first = np.asarray([0, 0, 1, 1, 2, 2])
+        permuted = np.asarray([2, 2, 0, 0, 1, 1])
+        mixed = np.asarray([0, 1, 0, 1, 0, 1])
+        self.assertAlmostEqual(adjusted_rand_index(first, permuted), 1.0)
+        self.assertLess(adjusted_rand_index(first, mixed), 1.0)
+
+    def test_grouped_bootstrap_paired_difference_preserves_pairs(self) -> None:
+        result = grouped_bootstrap_paired_difference(
+            np.asarray([0, 1, 2, 0, 1, 2]),
+            np.asarray([0, 1, 2, 0, 1, 2]),
+            np.asarray([0, 0, 2, 1, 1, 1]),
+            np.asarray([0, 0, 1, 0, 2, 2]),
+            np.asarray(["g1", "g1", "g1", "g2", "g2", "g2"]),
+            n_resamples=200,
+            seed=7,
+        )
+        self.assertEqual(result["eval_group_count"], 2)
+        self.assertGreater(float(result["accuracy_difference"]), 0.0)
+        self.assertGreater(float(result["accuracy_difference_probability_gt_zero"]), 0.0)
+
     def test_counter_sequence_file_schema(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -280,38 +399,72 @@ class PhaseFamilyMLTests(unittest.TestCase):
                 output_dir=root / "phase_detector",
                 horizon=20,
                 history_length=4,
-                prediction_horizon=5,
+                prediction_horizon=1,
                 tree_max_depth=3,
                 tree_min_leaf=2,
             )
             summary = summary_rows[0]
             self.assertEqual(summary.get("phase_label_source"), "train_split_kmeans_full_safe_counters")
             self.assertEqual(summary.get("history_length"), 4)
-            self.assertEqual(summary.get("prediction_horizon"), 5)
+            self.assertEqual(summary.get("prediction_horizon"), 1)
+            self.assertIn("family", summary)
+            self.assertIn("selected_counter", summary)
             self.assertIn("top1_accuracy", summary)
             self.assertIn("stable_case_accuracy", summary)
             self.assertIn("transition_case_accuracy", summary)
+            self.assertIn("transition_event_precision", summary)
+            self.assertIn("transition_event_recall", summary)
+            self.assertIn("transition_event_f1", summary)
+            self.assertIn("transition_false_alarm_rate", summary)
+            self.assertIn("accuracy_ci95_low", summary)
+            self.assertIn("accuracy_ci95_high", summary)
+            self.assertIn("eval_group_count", summary)
             models = {row.get("model") for row in summary_rows}
             self.assertIn("online_phase_history_tree", models)
+            self.assertIn("online_phase_history_tree_all_families", models)
+            self.assertIn("online_current_state_tree_all_families", models)
+            self.assertIn("markov_phase_predictor", models)
+            self.assertIn("rle_markov_phase_predictor", models)
+            self.assertIn("hsmm_duration_phase_predictor", models)
+            self.assertIn("rocket_phase_classifier", models)
+            self.assertIn("rocket_phase_classifier_all_families", models)
             self.assertIn("baseline_last_state", models)
             self.assertIn("baseline_majority", models)
             self.assertIn("baseline_state_conditioned_majority", models)
+            global_history_rows = [
+                row for row in summary_rows if row.get("model") == "online_phase_history_tree_all_families"
+            ]
+            self.assertEqual(len(global_history_rows), 1)
+            self.assertEqual(global_history_rows[0].get("family"), "__all_families__")
+            self.assertEqual(len([row for row in summary_rows if row.get("model") == "baseline_last_state"]), 1)
+            families = {row.get("family") for row in summary_rows if row.get("model") == "online_phase_history_tree"}
+            self.assertIn("core_fp", families)
+            summary = next(row for row in summary_rows if row.get("model") == "markov_phase_predictor")
+            self.assertIn("weighted_f1", summary)
+            self.assertIn("balanced_accuracy", summary)
+            self.assertIn("training_seconds", summary)
+            self.assertIn("inference_latency_us", summary)
+            self.assertIn("deployment_recommendation", summary)
+            self.assertIn("report_split", summary)
+            self.assertIn("counter_selection_split", summary)
+            oracle = next(row for row in summary_rows if row.get("model") == "baseline_last_state")
+            self.assertEqual(oracle.get("requires_oracle_current_phase"), 1)
+            self.assertIn("oracle diagnostic only", str(oracle.get("deployment_recommendation", "")))
+            deployable = next(row for row in summary_rows if row.get("model") == "online_current_state_tree_all_families")
+            self.assertEqual(deployable.get("requires_oracle_current_phase"), 0)
+            self.assertGreater(float(deployable.get("discretizer_storage_bytes", 0)), 0.0)
+            self.assertGreater(float(deployable.get("history_storage_bytes", 0)), 0.0)
             self.assertTrue((root / "phase_detector" / "phase_detector_summary.csv").exists())
-
-            sweep_rows = run_phase_detector_depth_sweep_for_experiment(
-                experiment_dir=root / "sequences_selected" / "pooled_run_group",
-                scope="global",
-                output_dir=root / "phase_detector",
-                horizon=20,
-                history_length=4,
-                prediction_horizon=5,
-                tree_depths=[1, 2, 3],
-                tree_min_leaf=2,
-            )
-            self.assertEqual(len(sweep_rows), 3)
-            self.assertEqual([int(row["tree_max_depth"]) for row in sweep_rows], [1, 2, 3])
-            self.assertTrue(all("mean_accuracy" in row for row in sweep_rows))
-            self.assertTrue((root / "phase_detector" / "phase_detector_depth_sweep_summary.csv").exists())
+            self.assertTrue((root / "phase_detector" / "phase_detector_hardware_budget.csv").exists())
+            self.assertTrue((root / "phase_detector" / "phase_detector_confusion_matrices.csv").exists())
+            self.assertTrue((root / "phase_detector" / "phase_detector_per_workload_accuracy.csv").exists())
+            self.assertTrue((root / "phase_detector" / "phase_detector_per_core_accuracy.csv").exists())
+            self.assertTrue((root / "phase_detector" / "phase_detector_per_thread_accuracy.csv").exists())
+            self.assertTrue((root / "phase_detector" / "phase_detector_per_process_count_accuracy.csv").exists())
+            self.assertTrue((root / "phase_detector" / "phase_detector_per_thread_process_accuracy.csv").exists())
+            self.assertTrue((root / "phase_detector" / "phase_detector_phase_behavior_by_thread.csv").exists())
+            self.assertTrue((root / "phase_detector" / "phase_detector_phase_behavior_by_process_count.csv").exists())
+            self.assertTrue((root / "phase_detector" / "phase_detector_phase_behavior_by_thread_process.csv").exists())
 
     def test_sequences_prefer_global_one_per_family_selection(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

@@ -8,7 +8,7 @@ hardware-friendly detector. The current flow is:
 3. `phase_family_ml.build_counter_sequences` fits train-only k-means over the full safe counter vector and writes one clustered-label/value sequence per raw counter.
 4. `phase_family_ml.run_ablation` selects the single best representative counter per family for approximating those clustered labels.
 5. `phase_family_ml.build_counter_sequences --ablation-results ...` refreshes the family streams with the selected counters while preserving the same offline clustered phase labels.
-6. `phase_family_ml.train_phase_detector` trains shallow global decision trees from the last 20 selected-counter intervals to the next 5 clustered phase labels.
+6. `phase_family_ml.train_phase_detector` trains per-family next-phase predictors over clustered online histories, including shallow decision trees, Markov/RLE/HSMM-style temporal baselines, a ROCKET-style classifier, and optional tiny PyTorch TCN/Transformer baselines when `torch` is installed.
 
 The default split is `config_group_holdout`, which keeps all reps of the same
 collection config in the same train/val/test split. This avoids the optimistic
@@ -97,6 +97,11 @@ uv run scripts/merge_runs.py \
 Re-merge old raw data with the latest `merge_runs.py` so
 `requested_input_size` is preserved for config-group splitting.
 
+`set1` will usually create more runs than `set2`/`set3`. That is expected with
+the current setup because `set1` expands over every requested thread count,
+while `set2` and `set3` expand over workload groups. The collector now prints a
+per-set task-plan summary before running so this difference is visible up front.
+
 ## Set Dataset Outputs
 
 This produces the paper-facing clustered phase detector artifacts:
@@ -135,10 +140,16 @@ uv run -m phase_family_ml.train_phase_detector \
   --sequences-root /scratch/kk6081/set3/results/phase_family_ml/counter_sequences \
   --output-dir /scratch/kk6081/set3/results/phase_family_ml/phase_detector \
   --history-length 20 \
-  --prediction-horizon 5 \
+  --prediction-horizon 1 \
   --tree-max-depth 6 \
   --tree-min-samples-leaf 8
 
+```
+
+For the full finals workflow across all sets and all input sizes, use:
+
+```bash
+bash scripts/run_full_phase_family_pipeline.sh
 ```
 
 ## Artifacts
@@ -166,12 +177,28 @@ Reduced phase detector outputs:
 ```text
 phase_detector/<split>/<scope>/phase_detector_predictions.csv
 phase_detector/<split>/<scope>/phase_detector_summary.csv
+phase_detector/<split>/<scope>/phase_detector_confusion_matrices.csv
+phase_detector/<split>/<scope>/phase_detector_per_workload_accuracy.csv
+phase_detector/<split>/<scope>/phase_detector_per_core_accuracy.csv
+phase_detector/<split>/<scope>/phase_detector_per_thread_accuracy.csv
+phase_detector/<split>/<scope>/phase_detector_per_process_count_accuracy.csv
+phase_detector/<split>/<scope>/phase_detector_per_thread_process_accuracy.csv
+phase_detector/<split>/<scope>/phase_detector_phase_behavior_by_thread.csv
+phase_detector/<split>/<scope>/phase_detector_phase_behavior_by_process_count.csv
+phase_detector/<split>/<scope>/phase_detector_phase_behavior_by_thread_process.csv
+phase_detector/<split>/<scope>/phase_detector_hardware_budget.csv
 phase_detector/phase_detector_summary_all.csv
 ```
 
-The detector writes one summary row per future step. With the default
-configuration, `prediction_step=1..5` corresponds to phases 1 through 5
-intervals after the current online history window.
+The detector writes one row per family for single-family models and one
+`__all_families__` row for baselines/cross-family models. It does not duplicate a
+global result across family names. With the default configuration,
+`prediction_step=1` corresponds to the next interval after the current history
+window.
+
+The extra grouped CSVs let you study how thread count (`set1`), process count
+(`set2`), and the joint thread/process configuration (`set3`) affect both model
+accuracy and the underlying clustered phase behavior.
 
 ## Metrics
 
@@ -188,10 +215,24 @@ Reported detector metrics:
 ```text
 top1_accuracy
 accuracy
+accuracy_ci95_low
+accuracy_ci95_high
 macro_f1
+weighted_f1
+balanced_accuracy
 high_usage_recall
 stable_case_accuracy
 transition_case_accuracy
+transition_event_precision
+transition_event_recall
+transition_event_f1
+transition_false_alarm_rate
+transition_accuracy_ci95_low
+transition_accuracy_ci95_high
+eval_group_count
+bootstrap_resamples
+training_seconds
+inference_latency_us
 history_length
 prediction_horizon
 prediction_step
@@ -199,6 +240,14 @@ tree_depth
 tree_internal_nodes
 tree_leaves
 estimated_storage_bytes
+stored_parameters_or_entries
+estimated_memory_bytes
+model_storage_bytes
+history_storage_bytes
+discretizer_storage_bytes
+approx_operations_per_prediction
+hardware_complexity_category
+deployment_recommendation
 ```
 
 Reported baseline rows in the same summary CSV:
@@ -207,9 +256,35 @@ Reported baseline rows in the same summary CSV:
 baseline_last_state
 baseline_majority
 baseline_state_conditioned_majority
+markov_phase_predictor
+rle_markov_phase_predictor
+hsmm_duration_phase_predictor
+rocket_phase_classifier
+rocket_phase_classifier_all_families
+tcn_phase_classifier
+tcn_phase_classifier_all_families
+tiny_transformer_phase_classifier
+tiny_transformer_phase_classifier_all_families
 ```
+
+`baseline_last_state`, the state-conditioned majority model, and the
+Markov/duration models receive the offline teacher's current phase. They are marked
+`requires_oracle_current_phase=1` and are diagnostic upper bounds, not deployable
+counter-only baselines. `online_current_state_tree_all_families` is the fair
+history-length-one baseline.
+
+For publication runs, `phase_family_ml.collect` defaults to all unordered workload
+combinations. Use `--pairing-mode chunked` only to reproduce exploratory collections.
+The merge stage writes `pmu_collection_quality.csv`, which reports enabled-time and
+multiplexing quality without exposing those audit fields as model features.
 
 The tree rows also include gain columns against these baselines so the CSV shows
 where the online history tree improves, especially on transition-heavy cases.
 
-Phase-change metrics are intentionally not used.
+If PyTorch is unavailable, the TCN and transformer rows are skipped and the
+reason is recorded in `phase_detector_manifest.json`.
+
+Reliability note: representative counter selection is done on `val` when a
+validation split exists, while the detector summary CSVs report held-out `test`
+metrics when a test split exists. The summary rows expose both
+`counter_selection_split` and `report_split`.

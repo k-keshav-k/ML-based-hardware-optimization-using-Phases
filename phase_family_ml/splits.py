@@ -18,28 +18,21 @@ class ExperimentSplit:
 
 
 def _run_grouped_split(rows: list[dict[str, str]], train_fraction: float, val_fraction: float, seed: int) -> dict[str, str]:
-    """Split run IDs into train/val/test while keeping intervals grouped by run."""
+    """Split execution groups while keeping co-running processes together."""
 
-    run_ids = sorted({str(row.get("run_id", "")) for row in rows if row.get("run_id", "")})
-    rng = np.random.default_rng(seed)
-    shuffled = list(run_ids)
-    rng.shuffle(shuffled)
-    count = len(shuffled)
-    if count == 0:
-        return {}
-    train_count = max(1, int(round(count * train_fraction)))
-    val_count = int(round(count * val_fraction)) if count - train_count > 1 else 0
-    if train_count + val_count >= count and count > 1:
-        train_count = count - 1
-        val_count = 0
+    runs_by_group: dict[str, set[str]] = defaultdict(set)
+    for row in rows:
+        run_id = str(row.get("run_id", "")).strip()
+        if not run_id:
+            continue
+        group_id = str(row.get("concurrent_group_id", "")).strip() or run_id
+        runs_by_group[group_id].add(run_id)
+    split_by_group = _split_items(sorted(runs_by_group), train_fraction, val_fraction, seed)
     output: dict[str, str] = {}
-    for index, run_id in enumerate(shuffled):
-        if index < train_count:
-            output[run_id] = "train"
-        elif index < train_count + val_count:
-            output[run_id] = "val"
-        else:
-            output[run_id] = "test"
+    for group_id, run_ids in runs_by_group.items():
+        split = split_by_group.get(group_id, "train")
+        for run_id in run_ids:
+            output[run_id] = split
     return output
 
 
@@ -66,29 +59,49 @@ def _split_items(items: list[object], train_fraction: float, val_fraction: float
     return output
 
 
+def _co_running_workloads(row: dict[str, str]) -> str:
+    workloads = [item.strip() for item in str(row.get("co_running_workloads", "")).split(",") if item.strip()]
+    if not workloads:
+        workload = str(row.get("workload", "")).strip()
+        workloads = [workload] if workload else []
+    return ",".join(sorted(workloads))
+
+
 def _config_key(row: dict[str, str]) -> tuple[str, ...]:
-    """Group repeated runs of the same collection scenario."""
+    """Group repetitions and all processes from one collection scenario."""
 
     return (
         str(row.get("experiment_set", "")),
         str(row.get("requested_input_size", "")),
-        str(row.get("workload", "")),
+        _co_running_workloads(row),
         str(row.get("threads", "")),
-        str(row.get("process_index", "")),
         str(row.get("process_count", "")),
-        str(row.get("co_running_workloads", "")),
         str(row.get("core_collection_scope", row.get("collection_scope", ""))),
+        str(row.get("pairing_mode", "")),
     )
 
 
 def _config_grouped_split(rows: list[dict[str, str]], train_fraction: float, val_fraction: float, seed: int) -> dict[str, str]:
     """Split config groups while keeping all reps for a config together."""
 
-    runs_by_config: dict[tuple[str, ...], set[str]] = defaultdict(set)
+    rows_by_execution_group: dict[str, list[dict[str, str]]] = defaultdict(list)
     for row in rows:
-        run_id = str(row.get("run_id", ""))
-        if run_id:
-            runs_by_config[_config_key(row)].add(run_id)
+        run_id = str(row.get("run_id", "")).strip()
+        if not run_id:
+            continue
+        group_id = str(row.get("concurrent_group_id", "")).strip() or run_id
+        rows_by_execution_group[group_id].append(row)
+
+    runs_by_config: dict[tuple[str, ...], set[str]] = defaultdict(set)
+    for group_rows in rows_by_execution_group.values():
+        representative = dict(group_rows[0])
+        representative["threads"] = ",".join(
+            sorted({str(row.get("threads", "")).strip() for row in group_rows if str(row.get("threads", "")).strip()})
+        )
+        config = _config_key(representative)
+        runs_by_config[config].update(
+            str(row.get("run_id", "")).strip() for row in group_rows if str(row.get("run_id", "")).strip()
+        )
     split_by_config = _split_items(sorted(runs_by_config), train_fraction, val_fraction, seed)
     output: dict[str, str] = {}
     for config, run_ids in runs_by_config.items():
@@ -99,20 +112,20 @@ def _config_grouped_split(rows: list[dict[str, str]], train_fraction: float, val
 
 
 def _per_workload_holdout(rows: list[dict[str, str]], train_fraction: float, val_fraction: float, seed: int) -> dict[str, str]:
-    """Split runs independently inside each workload group."""
+    """Stratify by complete workload scenario without splitting co-runners."""
 
-    by_workload: dict[str, list[dict[str, str]]] = defaultdict(list)
+    by_workload_scenario: dict[str, list[dict[str, str]]] = defaultdict(list)
     for row in rows:
-        by_workload[str(row.get("workload", ""))].append(row)
+        by_workload_scenario[_co_running_workloads(row)].append(row)
     output: dict[str, str] = {}
-    for offset, workload in enumerate(sorted(by_workload)):
-        payload = _run_grouped_split(by_workload[workload], train_fraction, val_fraction, seed + offset)
+    for offset, scenario in enumerate(sorted(by_workload_scenario)):
+        payload = _run_grouped_split(by_workload_scenario[scenario], train_fraction, val_fraction, seed + offset)
         output.update(payload)
     return output
 
 
 def _leave_one_workload_out(rows: list[dict[str, str]], holdout_workload: str) -> dict[str, str]:
-    """Use one workload as test and split remaining runs into train/val."""
+    """Hold out every co-running scenario that contains the named workload."""
 
     split_by_run: dict[str, str] = {}
     non_holdout_rows: list[dict[str, str]] = []
@@ -120,7 +133,8 @@ def _leave_one_workload_out(rows: list[dict[str, str]], holdout_workload: str) -
         run_id = str(row.get("run_id", ""))
         if not run_id:
             continue
-        if str(row.get("workload", "")) == holdout_workload:
+        scenario_workloads = set(_co_running_workloads(row).split(","))
+        if holdout_workload in scenario_workloads:
             split_by_run[run_id] = "test"
         else:
             non_holdout_rows.append(row)

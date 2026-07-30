@@ -1,0 +1,45 @@
+{
+  "random_seed": 17,
+  "splits": {
+    "train_fraction": 0.70,
+    "val_fraction": 0.15,
+    "test_fraction": 0.15
+  },
+  "families": {
+    "threshold_mode": "global"
+  },
+  "ablation": {
+    "score_weights": {
+      "accuracy": 0.7,
+      "high_usage_recall": 0.3
+    },
+    "tree_max_depth": 5,
+    "tree_min_samples_leaf": 8,
+    "global_exhaustive_one_per_family": true
+  },
+  "phase_detector": {
+    "history_length": 20,
+    "prediction_horizon": 1,
+    "decision_tree_max_depth": 6,
+    "decision_tree_min_samples_leaf": 8,
+    "bootstrap_resamples": 10000,
+    "enabled_models": [
+      "baseline_last_state",
+      "baseline_majority",
+      "baseline_state_conditioned_majority",
+      "markov_phase_predictor",
+      "rle_markov_phase_predictor",
+      "hsmm_duration_phase_predictor",
+      "online_current_state_tree_all_families",
+      "online_phase_history_tree",
+      "online_phase_history_tree_all_families"
+    ]
+  },
+  "experiments": {
+    "modes": [
+      "config_group_holdout",
+      "leave_one_workload_out"
+    ],
+    "default_mode": "all"
+  }
+}

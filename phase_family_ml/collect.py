@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 import argparse
+import itertools
 import json
 import os
+import random
 import subprocess
 import sys
 import time
@@ -93,6 +95,14 @@ def chunked(values: list[str], size: int) -> list[list[str]]:
     return groups
 
 
+def workload_groups(values: list[str], size: int, pairing_mode: str) -> list[list[str]]:
+    """Build co-running workload groups for exploratory or publication runs."""
+
+    if pairing_mode == "chunked":
+        return chunked(values, size)
+    return [list(group) for group in itertools.combinations(values, max(2, int(size)))]
+
+
 def affinity_groups(available_cpus: list[int], thread_counts: list[int]) -> list[list[int]]:
     groups: list[list[int]] = []
     offset = 0
@@ -135,6 +145,8 @@ def build_common_context(args: argparse.Namespace) -> dict[str, object]:
         "uncore_event_specs": supported_uncore_event_specs(platform, alias_map) if collect_uncore else [],
         "collect_uncore": collect_uncore,
         "core_collection_scope": args.core_collection_scope,
+        "pairing_mode": args.pairing_mode,
+        "task_order_seed": args.task_order_seed,
     }
 
 
@@ -189,6 +201,8 @@ def make_task(
         "process_index": process_index,
         "process_count": process_count,
         "co_running_workloads": ",".join(co_running_workloads),
+        "pairing_mode": context["pairing_mode"],
+        "task_order_seed": context["task_order_seed"],
         "collection_scope": context["core_collection_scope"],
         "core_collection_scope": context["core_collection_scope"],
         "cpu_topology": platform.get("cpu_topology", {}),
@@ -280,7 +294,7 @@ def build_tasks(args: argparse.Namespace, context: dict[str, object]) -> list[di
                     )
         if "set2" in sets:
             output_dir = raw_output_dir_for_set(args, "set2")
-            for group_index, group in enumerate(chunked(workloads, args.group_size), start=1):
+            for group_index, group in enumerate(workload_groups(workloads, args.group_size, args.pairing_mode), start=1):
                 if len(group) < 2:
                     continue
                 groups = affinity_groups(available_cpus, [1] * len(group))
@@ -305,7 +319,7 @@ def build_tasks(args: argparse.Namespace, context: dict[str, object]) -> list[di
                     )
         if "set3" in sets:
             output_dir = raw_output_dir_for_set(args, "set3")
-            for group_index, group in enumerate(chunked(workloads, args.group_size), start=1):
+            for group_index, group in enumerate(workload_groups(workloads, args.group_size, args.pairing_mode), start=1):
                 if len(group) < 2:
                     continue
                 thread_counts = [args.hybrid_threads] * len(group)
@@ -362,6 +376,39 @@ def tasks_by_set(tasks: list[dict[str, object]]) -> dict[str, list[dict[str, obj
         if set_key:
             grouped.setdefault(set_key, []).append(task)
     return grouped
+
+
+def summarize_task_plan(tasks: list[dict[str, object]]) -> dict[str, object]:
+    grouped = tasks_by_set(tasks)
+    summary: dict[str, object] = {"total_tasks": len(tasks), "sets": {}}
+    for set_key, set_tasks in sorted(grouped.items()):
+        workloads = sorted({str(task["metadata"].get("workload", "")) for task in set_tasks})
+        groups = sorted({str(task["execution_group_key"]) for task in set_tasks})
+        thread_values = sorted({int(task["metadata"].get("threads", 0) or 0) for task in set_tasks})
+        summary["sets"][set_key] = {
+            "tasks": len(set_tasks),
+            "groups": len(groups),
+            "unique_workloads": len(workloads),
+            "thread_values": thread_values,
+        }
+    return summary
+
+
+def print_task_plan_summary(tasks: list[dict[str, object]]) -> None:
+    summary = summarize_task_plan(tasks)
+    print(f"[collection] planned total_tasks={summary['total_tasks']}", file=sys.stderr, flush=True)
+    for set_key, payload in dict(summary["sets"]).items():
+        note = ""
+        if set_key == "set1":
+            note = " note=set1 expands over all requested thread counts"
+        elif set_key in {"set2", "set3"}:
+            note = " note=set2/set3 expand over workload groups, not per-thread sweeps"
+        print(
+            f"[collection] plan {set_key}: tasks={payload['tasks']} groups={payload['groups']} "
+            f"workloads={payload['unique_workloads']} thread_values={payload['thread_values']}{note}",
+            file=sys.stderr,
+            flush=True,
+        )
 
 
 def write_collection_manifests(args: argparse.Namespace, tasks: list[dict[str, object]]) -> dict[str, Path]:
@@ -448,6 +495,8 @@ def main() -> None:
     parser.add_argument("--output-dir", default="")
     parser.add_argument("--set1-threads", default="2,4,8")
     parser.add_argument("--group-size", type=int, default=2)
+    parser.add_argument("--pairing-mode", choices=["all_combinations", "chunked"], default="all_combinations")
+    parser.add_argument("--task-order-seed", type=int, default=17)
     parser.add_argument("--hybrid-threads", type=int, default=2)
     parser.add_argument("--pipeline-config", default=str(PROJECT_ROOT / "config" / "phase_family_ml_defaults.json"))
     parser.add_argument("--experiment-mode", choices=["per_workload_holdout", "pooled_run_group", "config_group_holdout", "leave_one_workload_out", "all"], default="config_group_holdout")
@@ -463,10 +512,12 @@ def main() -> None:
     tasks = build_tasks(args, context)
     manifest_paths = write_collection_manifests(args, tasks)
     if args.dry_run:
+        summary = summarize_task_plan(tasks)
         print(
             json.dumps(
                 {
                     "tasks": len(tasks),
+                    "task_plan": summary,
                     "dataset_root": str(args.dataset_root) if use_finals_layout(args) else "",
                     "manifests": {key: str(path) for key, path in manifest_paths.items()},
                     "postprocess": bool(use_finals_layout(args) and not args.skip_postprocess),
@@ -480,13 +531,15 @@ def main() -> None:
     tasks_by_group: dict[str, list[dict[str, object]]] = {}
     for task in tasks:
         tasks_by_group.setdefault(str(task["execution_group_key"]), []).append(task)
+    ordered_groups = list(tasks_by_group.items())
+    random.Random(args.task_order_seed).shuffle(ordered_groups)
     total_tasks = len(tasks)
     completed = 0
     failed = 0
     started = time.perf_counter()
+    print_task_plan_summary(tasks)
     print(f"[collection] starting {total_tasks} family-lm tasks across {len(tasks_by_group)} groups", file=sys.stderr, flush=True)
-    for group_index, group_tasks in enumerate(tasks_by_group.values(), start=1):
-        group_id = str(group_tasks[0]["execution_group_key"]) if group_tasks else ""
+    for group_index, (group_id, group_tasks) in enumerate(ordered_groups, start=1):
         print(f"[collection] group {group_index}/{len(tasks_by_group)}: {group_id}", file=sys.stderr, flush=True)
         with ThreadPoolExecutor(max_workers=len(group_tasks)) as executor:
             futures = [executor.submit(run_one_task, task) for task in group_tasks]

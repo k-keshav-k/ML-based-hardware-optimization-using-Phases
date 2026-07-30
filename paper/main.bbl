@@ -6,6 +6,12 @@ David~H. Albonesi.
 \newblock In {\em Proceedings of the 32nd Annual IEEE/ACM International
   Symposium on Microarchitecture}, pages 248--259, 1999.
 
+\bibitem{bai2018tcn}
+Shaojie Bai, J.~Zico Kolter, and Vladlen Koltun.
+\newblock An empirical evaluation of generic convolutional and recurrent
+  networks for sequence modeling.
+\newblock {\em arXiv preprint arXiv:1803.01271}, 2018.
+
 \bibitem{balasubramonian2000memory}
 Rajeev Balasubramonian, David~H. Albonesi, Alper Buyuktosunoglu, and Sandhya
   Dwarkadas.
@@ -13,18 +19,6 @@ Rajeev Balasubramonian, David~H. Albonesi, Alper Buyuktosunoglu, and Sandhya
   general-purpose processor architectures.
 \newblock In {\em Proceedings of the 33rd Annual IEEE/ACM International
   Symposium on Microarchitecture}, pages 245--257, 2000.
-
-\bibitem{bienia2008parsec}
-Christian Bienia, Sanjeev Kumar, Jaswinder~Pal Singh, and Kai Li.
-\newblock The parsec benchmark suite: Characterization and architectural
-  implications.
-\newblock In {\em Proceedings of the 17th International Conference on Parallel
-  Architectures and Compilation Techniques}, pages 72--81, 2008.
-
-\bibitem{breiman1984cart}
-Leo Breiman, Jerome~H. Friedman, Richard~A. Olshen, and Charles~J. Stone.
-\newblock {\em Classification and Regression Trees}.
-\newblock Wadsworth, 1984.
 
 \bibitem{buyuktosunoglu2000drowsy}
 Alper Buyuktosunoglu, Stanley Schuster, David Brooks, Pradip Bose, Peter Cook,
@@ -47,11 +41,11 @@ Chih-Hao Chang, Pangfeng Liu, and Jan-Jan Wu.
 \newblock In {\em Proceedings of the 42nd International Conference on Parallel
   Processing}, pages 349--358, 2013.
 
-\bibitem{dempster1977maximum}
-Arthur~P. Dempster, Nan~M. Laird, and Donald~B. Rubin.
-\newblock Maximum likelihood from incomplete data via the em algorithm.
-\newblock {\em Journal of the Royal Statistical Society: Series B},
-  39(1):1--38, 1977.
+\bibitem{dempster2020rocket}
+Angus Dempster, Fran{\c{c}}ois Petitjean, and Geoffrey~I. Webb.
+\newblock Rocket: Exceptionally fast and accurate time series classification
+  using random convolutional kernels.
+\newblock {\em Data Mining and Knowledge Discovery}, 34(5):1454--1495, 2020.
 
 \bibitem{dhiman2009dynamic}
 Gaurav Dhiman, Giovanni Marchetti, and Tajana Rosing.
@@ -164,13 +158,6 @@ J.~MacQueen.
 \newblock In {\em Proceedings of the Fifth Berkeley Symposium on Mathematical
   Statistics and Probability}, pages 281--297, 1967.
 
-\bibitem{mckenney1995rcu}
-Paul~E. McKenney and John~D. Slingwine.
-\newblock Read-copy update: Using execution history to solve concurrency
-  problems.
-\newblock In {\em Proceedings of the 10th International Parallel Processing
-  Symposium}, 1995.
-
 \bibitem{merkel2006balancing}
 Andreas Merkel and Frank Bellosa.
 \newblock Balancing power consumption in multiprocessor systems.
@@ -199,16 +186,6 @@ Vinicius Petrucci, Orlando Loques, and Daniel Mosse.
 \newblock In {\em Proceedings of the USENIX Workshop on Hot Topics in
   Power-Aware Computing and Systems}, 2012.
 
-\bibitem{quinlan1993c45}
-J.~Ross Quinlan.
-\newblock {\em C4.5: Programs for Machine Learning}.
-\newblock Morgan Kaufmann, 1993.
-
-\bibitem{rumelhart1986learning}
-David~E. Rumelhart, Geoffrey~E. Hinton, and Ronald~J. Williams.
-\newblock Learning representations by back-propagating errors.
-\newblock {\em Nature}, 323:533--536, 1986.
-
 \bibitem{sherwood2001bbda}
 Timothy Sherwood, Erez Perelman, and Brad Calder.
 \newblock Basic block distribution analysis to find periodic behavior and
@@ -228,6 +205,13 @@ Timothy Sherwood, Suleyman Sair, and Brad Calder.
 \newblock Phase tracking and prediction.
 \newblock In {\em Proceedings of the 30th International Symposium on Computer
   Architecture}, pages 336--349, 2003.
+
+\bibitem{vaswani2017attention}
+Ashish Vaswani, Noam Shazeer, Niki Parmar, Jakob Uszkoreit, Llion Jones,
+  Aidan~N. Gomez, {\L}ukasz Kaiser, and Illia Polosukhin.
+\newblock Attention is all you need.
+\newblock In {\em Advances in Neural Information Processing Systems},
+  volume~30, 2017.
 
 \bibitem{zhang2014multilevel}
 Weihua Zhang, Jiaxin Li, Yi~Li, and Haibo Chen.

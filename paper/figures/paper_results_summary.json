@@ -1,89 +1,311 @@
 {
-  "selected_counters": {
-    "Set 1": {
-      "L1": "l1d_loads",
-      "LLC": "llc_references",
-      "branch_control": "branch_instructions",
-      "core_fp": "instructions_retired",
-      "memory_offcore": "total_memory_bandwidth"
+  "models": {
+    "baseline_last_state": {
+      "label": "Last state",
+      "mean_accuracy": 0.802779882222084,
+      "mean_balanced_accuracy": 0.7859803093172155,
+      "mean_estimated_memory_bytes": 1.0,
+      "mean_inference_latency_us": 0.05120980843761078,
+      "mean_macro_f1": 0.7866512561810961,
+      "mean_transition_accuracy": 0.0
     },
-    "Set 2": {
-      "L1": "l1d_loads",
-      "LLC": "llc_misses",
-      "branch_control": "branch_instructions",
-      "core_fp": "instructions_retired",
-      "memory_offcore": "total_memory_bandwidth"
+    "hsmm_duration_phase_predictor": {
+      "label": "HSMM",
+      "mean_accuracy": 0.7981855212798163,
+      "mean_balanced_accuracy": 0.741438272824786,
+      "mean_estimated_memory_bytes": 78.0,
+      "mean_inference_latency_us": 8.577329628253494,
+      "mean_macro_f1": 0.7564237564483264,
+      "mean_transition_accuracy": 0.09580375117814378
     },
-    "Set 3": {
-      "L1": "l1d_stores",
-      "LLC": "llc_references",
-      "branch_control": "branch_instructions",
-      "core_fp": "instructions_retired",
-      "memory_offcore": "memory_read_bandwidth"
+    "online_phase_history_tree": {
+      "label": "Tree (local)",
+      "mean_accuracy": 0.6770603724934822,
+      "mean_balanced_accuracy": 0.568963351005243,
+      "mean_estimated_memory_bytes": 203.22500000000002,
+      "mean_inference_latency_us": 23.908800099899153,
+      "mean_macro_f1": 0.5374934708792078,
+      "mean_transition_accuracy": 0.3316416859387549
+    },
+    "online_phase_history_tree_all_families": {
+      "label": "Tree (all fam.)",
+      "mean_accuracy": 0.7903219687004179,
+      "mean_balanced_accuracy": 0.7590942256128058,
+      "mean_estimated_memory_bytes": 257.0,
+      "mean_inference_latency_us": 29.111655637387468,
+      "mean_macro_f1": 0.7690615026584259,
+      "mean_transition_accuracy": 0.2611274231352612
+    },
+    "rocket_phase_classifier_all_families": {
+      "label": "ROCKET",
+      "mean_accuracy": 0.7510261484851799,
+      "mean_balanced_accuracy": 0.6498095100869514,
+      "mean_estimated_memory_bytes": 8192.0,
+      "mean_inference_latency_us": 2.2390776518945437,
+      "mean_macro_f1": 0.6652481441320539,
+      "mean_transition_accuracy": 0.4002537195587954
+    },
+    "tcn_phase_classifier_all_families": {
+      "label": "TCN",
+      "mean_accuracy": 0.7834390547801282,
+      "mean_balanced_accuracy": 0.7401712816813778,
+      "mean_estimated_memory_bytes": 4748.0,
+      "mean_inference_latency_us": 35.7303231856428,
+      "mean_macro_f1": 0.755565814437442,
+      "mean_transition_accuracy": 0.2829130673150689
+    },
+    "tiny_transformer_phase_classifier_all_families": {
+      "label": "Tiny Transformer",
+      "mean_accuracy": 0.7914026201113762,
+      "mean_balanced_accuracy": 0.7703601645088759,
+      "mean_estimated_memory_bytes": 69772.0,
+      "mean_inference_latency_us": 783.4645924793839,
+      "mean_macro_f1": 0.7743797587292006,
+      "mean_transition_accuracy": 0.28315815131537453
     }
   },
   "sets": {
     "Set 1": {
-      "history_length": 20,
-      "last_baseline_accuracy": 0.7231739058330291,
-      "last_baseline_macro_f1": 0.5631391996579114,
-      "majority_baseline_accuracy": 0.6722802162275028,
-      "majority_baseline_macro_f1": 0.26800916522113494,
-      "mean_accuracy": 0.7496082880783295,
-      "mean_high_recall": 0.08464021786903911,
-      "mean_macro_f1": 0.5140254790427027,
-      "mean_stable_accuracy": 0.9257050954613579,
-      "mean_transition_accuracy": 0.2811525921157125,
-      "prediction_horizon": 5,
-      "selected_global_validation_score": 0.5372422227481678,
-      "state_conditioned_majority_accuracy": 0.7371398655994004,
-      "state_conditioned_majority_macro_f1": 0.5028729851693947,
-      "tree_baseline_accuracy": 0.7496082880783295,
-      "tree_baseline_macro_f1": 0.5140254790427027,
-      "tree_depth": 6
+      "baseline_last_state": {
+        "accuracy": 0.6885700220613707,
+        "balanced_accuracy": 0.6386589319922892,
+        "estimated_memory_bytes": 1.0,
+        "inference_latency_us": 0.03277785870402588,
+        "macro_f1": 0.6378774600351861,
+        "transition_accuracy": 0.0
+      },
+      "cluster_sizes": "0:146773;1:272376;2:38426",
+      "cluster_state_order": "0:-2.31051;1:0.158682;2:7.86035",
+      "hsmm_duration_phase_predictor": {
+        "accuracy": 0.680985286342006,
+        "balanced_accuracy": 0.558596921464522,
+        "estimated_memory_bytes": 78.0,
+        "inference_latency_us": 7.113030004146684,
+        "macro_f1": 0.5764580906492219,
+        "transition_accuracy": 0.06984368596686377
+      },
+      "input_sizes": [
+        "simlarge"
+      ],
+      "online_phase_history_tree": {
+        "accuracy": 0.643174649479461,
+        "balanced_accuracy": 0.4856250499971686,
+        "estimated_memory_bytes": 284.225,
+        "inference_latency_us": 17.949376367140523,
+        "macro_f1": 0.4624581256485188,
+        "transition_accuracy": 0.27905860312628067
+      },
+      "online_phase_history_tree_all_families": {
+        "accuracy": 0.6962276879318833,
+        "balanced_accuracy": 0.6131277130950961,
+        "estimated_memory_bytes": 307.375,
+        "inference_latency_us": 19.91943978956382,
+        "macro_f1": 0.6313770452212251,
+        "transition_accuracy": 0.13131549675077572
+      },
+      "process_counts": [
+        1
+      ],
+      "rocket_phase_classifier_all_families": {
+        "accuracy": 0.6528707130745528,
+        "balanced_accuracy": 0.48475500369175845,
+        "estimated_memory_bytes": 8192.0,
+        "inference_latency_us": 1.7151675773943964,
+        "macro_f1": 0.46715581579404164,
+        "transition_accuracy": 0.37778818570341316
+      },
+      "rows": 457575,
+      "run_count": 210,
+      "selected_counters": {
+        "L1": "counter__l1d_loads",
+        "LLC": "counter__llc_references",
+        "__global__": "counter__l1d_loads,counter__llc_references,counter__branch_instructions,counter__instructions_retired,counter__total_memory_bandwidth",
+        "branch_control": "counter__branch_instructions",
+        "core_fp": "counter__instructions_retired",
+        "memory_offcore": "counter__total_memory_bandwidth"
+      },
+      "tcn_phase_classifier_all_families": {
+        "accuracy": 0.6996116469451383,
+        "balanced_accuracy": 0.6104444482980051,
+        "estimated_memory_bytes": 4748.0,
+        "inference_latency_us": 32.52637945883079,
+        "macro_f1": 0.629804584259598,
+        "transition_accuracy": 0.19961360576078685
+      },
+      "thread_values": [
+        1,
+        4,
+        16
+      ],
+      "tiny_transformer_phase_classifier_all_families": {
+        "accuracy": 0.7042974091563805,
+        "balanced_accuracy": 0.6324209425419043,
+        "estimated_memory_bytes": 69772.0,
+        "inference_latency_us": 606.4684789862528,
+        "macro_f1": 0.6449829560613269,
+        "transition_accuracy": 0.21066682278555118
+      },
+      "train_rows": 326714
     },
     "Set 2": {
-      "history_length": 20,
-      "last_baseline_accuracy": 0.7788351532021676,
-      "last_baseline_macro_f1": 0.6066936204124092,
-      "majority_baseline_accuracy": 0.8313862672283753,
-      "majority_baseline_macro_f1": 0.45396543742514117,
-      "mean_accuracy": 0.8350665460636865,
-      "mean_high_recall": 0.09145821276753305,
-      "mean_macro_f1": 0.4771103083221987,
-      "mean_stable_accuracy": 0.9357368728813397,
-      "mean_transition_accuracy": 0.4740738407838391,
-      "prediction_horizon": 5,
-      "selected_global_validation_score": 0.6034226031746032,
-      "state_conditioned_majority_accuracy": 0.8323978279220169,
-      "state_conditioned_majority_macro_f1": 0.5048566980990236,
-      "tree_baseline_accuracy": 0.8350665460636865,
-      "tree_baseline_macro_f1": 0.4771103083221987,
-      "tree_depth": 6
+      "baseline_last_state": {
+        "accuracy": 0.8047099368179207,
+        "balanced_accuracy": 0.8383609679174113,
+        "estimated_memory_bytes": 1.0,
+        "inference_latency_us": 0.07435016650738627,
+        "macro_f1": 0.8403069614779058,
+        "transition_accuracy": 0.0
+      },
+      "cluster_sizes": "0:12717;1:2957;2:9250",
+      "cluster_state_order": "0:-2.10825;1:-1.45804;2:3.81611",
+      "hsmm_duration_phase_predictor": {
+        "accuracy": 0.8047099368179207,
+        "balanced_accuracy": 0.8383609679174113,
+        "estimated_memory_bytes": 78.0,
+        "inference_latency_us": 7.62994968723388,
+        "macro_f1": 0.8403069614779058,
+        "transition_accuracy": 0.0
+      },
+      "input_sizes": [
+        "simlarge"
+      ],
+      "online_phase_history_tree": {
+        "accuracy": 0.5874784606547961,
+        "balanced_accuracy": 0.5915396336722953,
+        "estimated_memory_bytes": 136.175,
+        "inference_latency_us": 25.77732542357453,
+        "macro_f1": 0.5442640616768093,
+        "transition_accuracy": 0.4123529411764706
+      },
+      "online_phase_history_tree_all_families": {
+        "accuracy": 0.7599080987937966,
+        "balanced_accuracy": 0.8080834777525475,
+        "estimated_memory_bytes": 156.25,
+        "inference_latency_us": 30.1579894238012,
+        "macro_f1": 0.8100117924284761,
+        "transition_accuracy": 0.4588235294117647
+      },
+      "process_counts": [
+        2
+      ],
+      "rocket_phase_classifier_all_families": {
+        "accuracy": 0.7156806433084434,
+        "balanced_accuracy": 0.6813493633682407,
+        "estimated_memory_bytes": 8192.0,
+        "inference_latency_us": 1.7868764944575697,
+        "macro_f1": 0.7178454044269409,
+        "transition_accuracy": 0.45
+      },
+      "rows": 24924,
+      "run_count": 80,
+      "selected_counters": {
+        "L1": "counter__l1d_stores",
+        "LLC": "counter__llc_references",
+        "__global__": "counter__l1d_stores,counter__llc_references,counter__branch_mispredictions,counter__instructions_retired,counter__offcore_demand_data_reads",
+        "branch_control": "counter__branch_mispredictions",
+        "core_fp": "counter__instructions_retired",
+        "memory_offcore": "counter__offcore_demand_data_reads"
+      },
+      "tcn_phase_classifier_all_families": {
+        "accuracy": 0.7352096496266514,
+        "balanced_accuracy": 0.7610412721084715,
+        "estimated_memory_bytes": 4748.0,
+        "inference_latency_us": 16.164841020179164,
+        "macro_f1": 0.7739150234593974,
+        "transition_accuracy": 0.4458823529411765
+      },
+      "thread_values": [
+        1
+      ],
+      "tiny_transformer_phase_classifier_all_families": {
+        "accuracy": 0.7514072372199885,
+        "balanced_accuracy": 0.7980604534005038,
+        "estimated_memory_bytes": 69772.0,
+        "inference_latency_us": 596.5932501326992,
+        "macro_f1": 0.7994232227859508,
+        "transition_accuracy": 0.43529411764705883
+      },
+      "train_rows": 19341
     },
     "Set 3": {
-      "history_length": 20,
-      "last_baseline_accuracy": 0.6337748857284423,
-      "last_baseline_macro_f1": 0.46703566636332383,
-      "majority_baseline_accuracy": 0.544822923780157,
-      "majority_baseline_macro_f1": 0.23511496335122656,
-      "mean_accuracy": 0.649592083649743,
-      "mean_high_recall": 0.7568270724807865,
-      "mean_macro_f1": 0.4474949343456206,
-      "mean_stable_accuracy": 0.8373821310514085,
-      "mean_transition_accuracy": 0.3207478470845288,
-      "prediction_horizon": 5,
-      "selected_global_validation_score": 0.623052489502596,
-      "state_conditioned_majority_accuracy": 0.6337748857284423,
-      "state_conditioned_majority_macro_f1": 0.46703566636332383,
-      "tree_baseline_accuracy": 0.649592083649743,
-      "tree_baseline_macro_f1": 0.4474949343456206,
-      "tree_depth": 6
+      "baseline_last_state": {
+        "accuracy": 0.9150596877869606,
+        "balanced_accuracy": 0.880921028041946,
+        "estimated_memory_bytes": 1.0,
+        "inference_latency_us": 0.0465014001014202,
+        "macro_f1": 0.8817693470301964,
+        "transition_accuracy": 0.0
+      },
+      "cluster_sizes": "0:54469;1:10558;2:62593",
+      "cluster_state_order": "0:-1.99279;1:-0.852912;2:1.54338",
+      "hsmm_duration_phase_predictor": {
+        "accuracy": 0.9088613406795225,
+        "balanced_accuracy": 0.8273569290924248,
+        "estimated_memory_bytes": 78.0,
+        "inference_latency_us": 10.989009193379921,
+        "macro_f1": 0.8525062172178514,
+        "transition_accuracy": 0.21756756756756757
+      },
+      "input_sizes": [
+        "simlarge"
+      ],
+      "online_phase_history_tree": {
+        "accuracy": 0.8005280073461892,
+        "balanced_accuracy": 0.629725369346265,
+        "estimated_memory_bytes": 189.275,
+        "inference_latency_us": 27.999698508982405,
+        "macro_f1": 0.6057582253122955,
+        "transition_accuracy": 0.3035135135135135
+      },
+      "online_phase_history_tree_all_families": {
+        "accuracy": 0.9148301193755739,
+        "balanced_accuracy": 0.8560714859907739,
+        "estimated_memory_bytes": 307.375,
+        "inference_latency_us": 37.257537698797385,
+        "macro_f1": 0.8657956703255766,
+        "transition_accuracy": 0.19324324324324324
+      },
+      "process_counts": [
+        2
+      ],
+      "rocket_phase_classifier_all_families": {
+        "accuracy": 0.8845270890725436,
+        "balanced_accuracy": 0.7833241632008553,
+        "estimated_memory_bytes": 8192.0,
+        "inference_latency_us": 3.2151888838316647,
+        "macro_f1": 0.8107432121751792,
+        "transition_accuracy": 0.372972972972973
+      },
+      "rows": 127620,
+      "run_count": 80,
+      "selected_counters": {
+        "L1": "counter__l1d_loads",
+        "LLC": "counter__llc_misses",
+        "__global__": "counter__l1d_loads,counter__llc_misses,counter__branch_instructions,counter__instructions_retired,counter__total_memory_bandwidth",
+        "branch_control": "counter__branch_instructions",
+        "core_fp": "counter__instructions_retired",
+        "memory_offcore": "counter__total_memory_bandwidth"
+      },
+      "tcn_phase_classifier_all_families": {
+        "accuracy": 0.915495867768595,
+        "balanced_accuracy": 0.8490281246376569,
+        "estimated_memory_bytes": 4748.0,
+        "inference_latency_us": 58.49974907791846,
+        "macro_f1": 0.8629778355933305,
+        "transition_accuracy": 0.20324324324324325
+      },
+      "thread_values": [
+        4
+      ],
+      "tiny_transformer_phase_classifier_all_families": {
+        "accuracy": 0.9185032139577595,
+        "balanced_accuracy": 0.8805990975842197,
+        "estimated_memory_bytes": 69772.0,
+        "inference_latency_us": 1147.3320483191999,
+        "macro_f1": 0.8787330973403242,
+        "transition_accuracy": 0.20351351351351352
+      },
+      "train_rows": 101084
     }
-  },
-  "storage_bytes": {
-    "Set 1": 1773.125,
-    "Set 2": 1259.0,
-    "Set 3": 1508.75
   }
 }

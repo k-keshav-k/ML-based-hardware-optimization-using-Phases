@@ -1,0 +1,443 @@
+\documentclass[conference,10pt]{IEEEtran}
+
+\usepackage[T1]{fontenc}
+\usepackage{microtype}
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{booktabs}
+\usepackage{graphicx}
+\usepackage{multirow}
+\usepackage{xcolor}
+\usepackage[hidelinks]{hyperref}
+\usepackage{url}
+
+\newcommand{\system}{\textsc{FamilyPhase}}
+\newcommand{\draftwarning}{%
+  \begin{center}
+  \fbox{\parbox{0.94\columnwidth}{\footnotesize\textbf{Internal evidence-audit draft---do not submit.}
+  The final multicore files are not mounted in the current environment. Numbers marked
+  ``pilot'' come from the older five-workload validation set and are included to test
+  the analysis and paper structure, not to replace the required final rerun.}}
+  \end{center}}
+
+\title{One Counter per Resource Family: Compact Online Multicore Phase Prediction}
+\author{\IEEEauthorblockN{Anonymous Author(s)}}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+Hardware performance counters can expose workload phases, but a full counter vector
+often exceeds the physical PMU slots and a high-accuracy phase predictor can obtain a
+misleading result by merely repeating an oracle phase label. We study a stricter
+interface: an offline, train-only full-counter teacher defines a global pressure phase,
+while an online predictor observes one validation-selected counter state from each
+resource family. We separate oracle diagnostics from deployable baselines, split and
+resample complete executions, and include the discretizer and history state in the
+storage budget. In an audited pilot of 60 PARSEC executions, a depth-six tree over five
+20-interval histories obtains 98.21\% held-out accuracy (95\% execution-group bootstrap
+CI: 97.64--98.71\%) using an estimated 201.25 bytes. Against an equally deployable tree
+using only the current counter states, history improves accuracy by 0.60 percentage
+points (paired 95\% CI: 0.29--0.92) and transition accuracy by 12.95 points, although
+the latter CI includes zero. The audit also finds material multiplexing variation in the pilot
+collection, showing why enabled-time and workload-disjoint results must accompany
+accuracy. These results motivate a measurement-quality-first evaluation of compact
+phase interfaces rather than an uncalibrated claim of end-to-end hardware savings.
+\end{abstract}
+
+\draftwarning
+
+\section{Introduction}
+
+An online hardware controller needs a compact description of what the workload will
+do next. Raw performance-monitoring-unit (PMU) events are natural signals, yet three
+problems make a phase interface difficult to evaluate. First, processors expose more
+useful events than can be scheduled simultaneously; multiplexing can produce noisy or
+missing 10~ms samples. Second, adjacent phase labels are highly persistent, so a model
+can report high accuracy by repeating the current phase while detecting no changes.
+Third, randomly splitting intervals leaks nearly identical samples from one execution
+into both training and test sets. These problems matter before the choice of model.
+
+Prior work established code- and counter-based program phases for representative
+simulation, runtime prediction, cache adaptation, and multicore management
+\cite{sherwood2001bbda,sherwood2002simpoint,sherwood2003phase,perelman2006parallel,
+nomani2015predicting,lozano2022phase}. Rich offline signatures are valuable for phase
+discovery but are not automatically viable as a short-latency hardware interface.
+Conversely, a tiny model is not useful if it relies on an oracle current label or a
+counter set that the PMU rarely schedules.
+
+We investigate whether a global phase discovered from a broad safe-counter vector can
+be approximated online by one counter per resource family. The families correspond to
+L1, L2, LLC, branch/control, core/FP, and memory/off-core behavior. A train-only
+$k$-means teacher creates ordered pressure labels. Validation ablation freezes one
+event per available family. One-dimensional train-only clustering converts each event
+to a two-bit state, and a shallow tree predicts the next global label from the last
+$H$ states. We call this pipeline \system.
+
+The paper makes three methodological contributions.
+
+\begin{itemize}
+  \item We define a reduced resource-family PMU interface while keeping the target
+  explicit: every student predicts one \emph{global full-counter teacher label}; the
+  per-family states are inputs, not separate phase ground truths.
+  \item We introduce an evaluation protocol that groups co-running processes and
+  repetitions before splitting, labels persistence/Markov models that consume the
+  teacher's current phase as oracle diagnostics, and compares history against a
+  deployable current-state-only tree.
+  \item We make collection quality and implementation cost first-class outputs:
+  execution-group confidence intervals, $k$/seed stability, PMU enabled time, tree
+  state, discretization thresholds, and history storage are reported together.
+\end{itemize}
+
+The audited pilot suggests that compact histories contain useful transition
+information, but it also exposes evidence that must be corrected before a full claim:
+only nine runs are held out in the primary split, $k=2$ is more stable than the chosen
+$k=3$, and several events have poor enabled time. We report these limitations rather
+than converting them into a proxy energy result.
+
+\section{Background and Related Work}
+
+\subsection{Program phases}
+
+BBV and SimPoint methods cluster intervals with similar basic-block distributions and
+use representative intervals to reduce simulation cost
+\cite{sherwood2001bbda,sherwood2002simpoint,hamerly2005simpoint3}. Online phase trackers
+replace long profiling signatures with compact histories and transition models
+\cite{sherwood2003phase}. The definition is task dependent: working sets are useful for
+cache allocation, while PMU events expose resource pressure with lower software
+instrumentation cost \cite{dhodapkar2002managing,dhodapkar2003comparing}.
+
+Multicore execution complicates phase ownership. A global label represents a package
+or workload group cheaply, a local label represents each core independently, and a
+distributed predictor combines local and cross-core context
+\cite{perelman2006parallel,chang2013sampling,lozano2022phase}. \system uses a global
+target because package-level cache, bandwidth, thermal, and scheduling policies need a
+common state. Resource-family inputs describe which subsystems provide evidence for
+that target; we do not call them family-specific target phases.
+
+\subsection{Counter selection and phase-aware control}
+
+Counter-based predictors have been applied to power/performance modeling, scheduling,
+and cache-demand estimation \cite{kim2017p4,nomani2015predicting,ziedan2016runtime}.
+Phase-aware policies have also controlled caches, dormant structures, DVFS, and power
+balancing \cite{balasubramonian2000memory,albonesi1999selective,
+buyuktosunoglu2000drowsy,isci2003runtime,merkel2006balancing}. These works motivate the
+resource-family organization. Our focus is narrower: how much phase fidelity survives
+an aggressively reduced observable interface, and how should that trade-off be
+measured without leaking executions or granting a baseline oracle labels?
+
+PMU event meaning and availability vary across microarchitectures. Multiplexed events
+are scaled by Linux \texttt{perf}, but enabled time still controls measurement quality
+and should be reported \cite{intel2024optimization,intel2024sdm,linux2024perf,
+perfwiki2024}. This motivates separating teacher collection, reduced online collection,
+and model evaluation instead of counting only final model parameters.
+
+\section{Resource-Family Phase Interface}
+\label{sec:design}
+
+\subsection{Train-only global teacher}
+
+Let $x_{r,t}\in\mathbb{R}^{d}$ be the safe PMU vector at interval $t$ of run $r$.
+Timing-derived features such as cycles, IPC/CPI, elapsed time, and requested frequency
+are excluded so that a future policy does not trivially feed its action back into the
+label. Each nonnegative count is transformed by $\log(1+x)$, missing values are filled
+with training medians, and features are standardized with training statistics.
+
+The teacher fits $k$-means on training rows only:
+\begin{equation}
+  c_t=\arg\min_{j\in\{0,\ldots,k-1\}}\|\tilde{x}_{r,t}-\mu_j\|_2^2.
+\end{equation}
+Validation and test rows use the frozen scaler and nearest centroid. Anonymous cluster
+IDs are ordered by an increasing pressure score over available LLC-miss, memory-
+bandwidth, branch-misprediction, and stall indicators. For $k=3$, the labels are
+reported as low, moderate, and high pressure. The labels are descriptive operating
+regions, not an external ground truth for power or bottlenecks.
+
+\subsection{Selecting and discretizing the online interface}
+
+Candidate events are partitioned into resource families. Near-duplicate events are
+identified on training data using Spearman correlation. Singleton decision-tree
+ablations are scored on validation accuracy and high-pressure recall, and one
+representative $e_f^\star$ is frozen per available family $f$. The test split never
+selects an event.
+
+For the online representation, a one-dimensional three-cluster model is fit to
+$e_f^\star$ on training rows. Its ordered state
+$s_{f,t}\in\{0,1,2\}$ needs two bits. Two 16-bit boundaries per family approximate the
+nearest-centroid decision. The cross-family history vector is
+\begin{equation}
+  u_t=[s_{1,t-H+1},\ldots,s_{F,t-H+1},\ldots,s_{F,t}],
+\end{equation}
+and the deployable predictor learns $h(u_t)\rightarrow c_{t+1}$. A depth-limited CART
+tree is used because inference consists of comparisons and table-like child traversal
+\cite{breiman1984cart,quinlan1993c45}.
+
+\subsection{Baselines and their information sets}
+
+Table~\ref{tab:baselines} prevents an easy but consequential category error. Persistence,
+state-conditioned majority, Markov, run-length Markov, and the duration approximation
+consume the teacher's true $c_t$. Because the full teacher is offline, these methods
+are oracle diagnostics unless a separate online phase estimator is added. They measure
+phase persistence but are not fair hardware implementations. The majority predictor
+uses only the training label prior. The fair history ablation is a tree trained on the
+current vector $[s_{1,t},\ldots,s_{F,t}]$ with the same depth/leaf limits.
+
+\begin{table}[t]
+\centering
+\caption{Model information available at prediction time.}
+\label{tab:baselines}
+\footnotesize
+\begin{tabular}{p{0.31\columnwidth}p{0.38\columnwidth}p{0.13\columnwidth}}
+\toprule
+Model & Online input & Deploy. \\
+\midrule
+Majority & training prior & yes \\
+Teacher persistence/Markov & true teacher $c_t$ & no (oracle) \\
+Current-state tree & selected $s_{1..F,t}$ & yes \\
+Single-family history tree & selected $s_{f,t-H+1:t}$ & yes \\
+Cross-family history tree & selected $s_{1..F,t-H+1:t}$ & yes \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{Analytical implementation budget}
+
+For a tree with $I$ internal nodes, $L$ leaves, $D$ input features, and $N=I+L$
+nodes, the model estimate is
+\begin{equation}
+ B_{tree}=\frac{I(\lceil\log_2D\rceil+16+2\lceil\log_2N\rceil)+2L}{8}.
+\end{equation}
+The full online estimate adds $\lceil2FH/8\rceil$ history bytes and $4F$ bytes for two
+16-bit discretizer boundaries per family. This excludes PMU register hardware already
+present in the processor and is an analytical storage estimate, not synthesis area.
+
+\section{Experimental Methodology}
+
+\subsection{Audited pilot}
+
+The currently reproducible pilot uses five PARSEC workloads---blackscholes, bodytrack,
+canneal, fluidanimate, and freqmine---with 1, 2, 4, and 8 threads and three repetitions
+per configuration (60 runs) \cite{bienia2008parsec}. Task-local counters were sampled
+at 10~ms on a dual-socket Intel Xeon E5-2680~v2 system with 20 physical cores and SMT
+disabled, using Linux \texttt{perf} 5.14. The safe merged table contains 9,409 interval
+rows and eight usable counter columns. L2 events were unavailable, leaving five online
+families. This dataset is a method-validation pilot, not the intended final multicore
+co-runner study.
+
+The primary split groups all repetitions of each workload/thread configuration before
+assigning 70\%/15\%/15\% to train/validation/test. There are 5,642 valid history windows
+for training and 1,341 for test; only nine complete runs occur in the test split.
+Leave-one-workload-out results are generated separately. All interval metrics are
+accompanied by a cluster bootstrap that samples complete run or concurrent-group IDs.
+
+\subsection{Final multicore protocol}
+
+The final study uses three regimes: one multithreaded process, two single-threaded
+co-runners, and two four-thread co-runners. For seven workloads the collector enumerates
+all $\binom{7}{2}=21$ unordered cross-workload pairs. Both processes in a concurrent
+group share a split, and any workload holdout moves every group containing that
+workload to test. This corrects an earlier exploratory design that used only four fixed
+pairs and could split partners independently. No result from that old split is used in
+this draft.
+
+\subsection{Metrics and uncertainty}
+
+We report accuracy, macro F1, balanced accuracy, high-pressure recall, stable-case
+accuracy, and transition-case accuracy. A transition case satisfies $c_{t+1}\ne c_t$.
+Final results will additionally report transition precision/recall/F1, false alarms,
+and transition detection delay. Confidence intervals use 10,000 execution-group
+bootstrap resamples. Model comparisons use paired resampling of the same groups; a
+difference is not described as reliable when its 95\% interval crosses zero.
+
+Clustering robustness is evaluated for $k\in\{2,3,4,5\}$ and five initializations using
+pairwise adjusted Rand index (ARI), train distance, centroid separation, and minimum
+cluster share. History, tree depth, and sampling-interval sensitivity are also required
+for the final study.
+
+\section{Audited Pilot Results}
+
+\subsection{Does history help a deployable predictor?}
+
+Table~\ref{tab:pilot-main} reports one copy of each cross-family result. The exporter
+uses the family label \texttt{\_\_all\_families\_\_} for these rows because the global
+target and cross-family features must not be repeated and averaged as independent
+observations. The oracle persistence diagnostic
+reaches 97.69\% accuracy because only 31 of 1,341 test windows transition, but it has
+zero transition accuracy. Its high accuracy is evidence of label persistence, not a
+deployable win.
+
+The current-state tree recovers 97.61\% accuracy and correctly predicts 12.9\% of
+transitions. The 20-interval history tree improves accuracy to 98.21\% and transition
+accuracy to 25.8\%. The execution-group CIs are wider than an interval bootstrap would
+suggest. A paired comparison finds a 0.60-point accuracy improvement (95\% CI:
+0.29--0.92; bootstrap probability of a positive difference 99.99\%). The transition
+improvement is 12.95 points, but its 95\% CI is 0.0--26.92 points. Thus this pilot
+supports the accuracy effect but is underpowered for a strong transition claim.
+As a binary change detector, the history tree has 90.0\% precision, 29.0\% recall,
+and 43.9\% F1 (9 true changes and one false alarm); the current-state tree has 54.5\%
+precision, 19.4\% recall, and 28.6\% F1 (6 true changes and five false alarms).
+
+\begin{table}[t]
+\centering
+\caption{Pilot configuration-group holdout. CIs resample nine test runs. Oracle
+persistence consumes the offline teacher phase and is not deployable.}
+\label{tab:pilot-main}
+\footnotesize
+\begin{tabular}{lccc}
+\toprule
+Model & Accuracy (95\% CI) & Macro F1 & Trans. acc. \\
+\midrule
+Majority & 77.03 (70.77--82.69) & 29.01 & 48.4 \\
+Oracle persistence & 97.69 (97.20--98.14) & 95.97 & 0.0 \\
+Current-state tree & 97.61 (96.84--98.30) & 95.45 & 12.9 \\
+20-history tree & \textbf{98.21} (97.64--98.71) & \textbf{96.88} & \textbf{25.8} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+The majority transition accuracy is not a contradiction: with few transitions, a
+constant phase can happen to match one transition destination while failing most
+stable regions. This is why neither overall accuracy nor transition accuracy alone is
+sufficient. Macro F1 and the confusion matrix must accompany both.
+
+\subsection{Does the interface generalize to an unseen workload?}
+
+Table~\ref{tab:pilot-loo} holds out every run of one workload at a time. Across the
+five folds, the history tree averages 94.60\% accuracy and 43.9\% transition accuracy,
+compared with 93.01\% and 22.5\% for the current-state tree. Oracle persistence averages
+94.03\% accuracy and zero transition accuracy. The result is not uniformly easy:
+bodytrack reduces history-tree accuracy to 82.24\%. This failure case should be
+explained with its phase shares and confusion matrix rather than hidden by the mean.
+Paired execution-group bootstraps place the transition-accuracy improvement above zero
+in every fold (the smallest lower bound is 5.9 points). Accuracy improves reliably in
+four folds; canneal's 0.07-point difference has a 95\% CI of $-0.38$--0.63 points.
+Because folds reuse training workloads, their arithmetic mean is descriptive rather
+than five independent replications.
+
+\begin{table}[t]
+\centering
+\caption{Pilot leave-one-workload-out results (percent).}
+\label{tab:pilot-loo}
+\scriptsize
+\setlength{\tabcolsep}{3pt}
+\begin{tabular}{lrrrr}
+\toprule
+Holdout & Cur. acc. & Hist. acc. & Cur. trans. & Hist. trans. \\
+\midrule
+blackscholes & 97.68 & 98.24 & 21.43 & 40.48 \\
+bodytrack & 76.47 & 82.24 & 21.04 & 47.26 \\
+canneal & 98.22 & 98.28 & 25.71 & 45.71 \\
+fluidanimate & 95.77 & 96.69 & 20.27 & 50.00 \\
+freqmine & 96.94 & 97.55 & 24.14 & 36.21 \\
+\midrule
+Mean & 93.01 & \textbf{94.60} & 22.52 & \textbf{43.93} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{What does the compact interface cost?}
+
+The current-state tree uses an estimated 64.88~B including five discretizers and a
+two-byte current-state register. The cross-family history tree uses 201.25~B including
+25~B of two-bit history and 20~B of thresholds. The increase is small in absolute terms,
+but it should not be advertised as RTL area without synthesis. Software inference
+latency in the Python implementation is approximately 52~$\mu$s per prediction and is
+not a cycle-level hardware estimate.
+
+\subsection{Are three teacher states stable?}
+
+Table~\ref{tab:k-stability} shows that the pilot does not uniquely justify $k=3$.
+Three states have mean pairwise ARI 0.927, but the smallest cluster averages only 2.1\%
+of rows. Two states are almost invariant to initialization and more balanced. Four and
+five states improve within-cluster distance but reduce seed stability and create even
+smaller clusters. A final paper may retain $k=3$ for low/moderate/high semantics only
+if the larger multicore study confirms stability and utility; otherwise $k$ should be
+selected on train/validation evidence.
+
+\begin{table}[t]
+\centering
+\caption{Pilot train-only clustering sensitivity over five seeds.}
+\label{tab:k-stability}
+\footnotesize
+\begin{tabular}{ccccc}
+\toprule
+$k$ & Mean ARI & Min ARI & Train dist. & Min share \\
+\midrule
+2 & 1.000 & 0.999 & 1.418 & 15.8\% \\
+3 & 0.927 & 0.817 & 1.276 & 2.1\% \\
+4 & 0.845 & 0.742 & 1.136 & 1.8\% \\
+5 & 0.734 & 0.511 & 0.990 & 1.8\% \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{PMU scheduling is a first-order validity issue}
+
+Reprocessing exactly the 60 raw pilot runs preserves \texttt{perf}'s enabled percentage.
+For the eight safe events used by the teacher, mean enabled time is 90.6--91.0\%, but
+the fifth percentile is only 64--66\% and 32.4--33.7\% of samples fall below 90\%.
+Rare samples reach zero enabled time. This variation can distort both the teacher and
+the selected interface at 10~ms granularity. Accordingly, the final experiment must
+compare the full profile against the frozen reduced profile and report enabled-time
+improvement and runtime overhead. The pilot accuracy cannot establish that benefit by
+itself.
+
+\section{Discussion}
+
+\subsection{What the result supports}
+
+The pilot supports a limited conclusion: within seen workload families and a grouped
+configuration split, five compact current states approximate the next global teacher
+phase, and a short history provides a small paired accuracy improvement. The analytical
+state is hundreds rather than tens of thousands of bytes. These properties make the
+interface plausible for a firmware or hardware prototype.
+
+It does not establish energy savings, cache savings, or optimal control. The prior
+draft mapped labels to arbitrary L1 power factors; that proxy is removed because no
+cache size, miss latency, energy model, or slowdown was calibrated. A control claim
+requires Linux \texttt{resctrl}, a cache simulator, DVFS measurements, or another real
+actuator with performance and energy accounting.
+
+\subsection{Threats to validity}
+
+\textbf{Construct validity.} The teacher labels are clusters in the chosen counter
+space, not independently measured bottlenecks. Ordering them by pressure aids
+interpretation but does not prove that every high label needs the same action.
+
+\textbf{Internal validity.} PMU multiplexing, frequency variation, OS noise, NUMA
+placement, affinity, warm-up, and interval alignment can change counts. The final
+artifact must report event enabled time, governor/turbo state, kernel and \texttt{perf}
+versions, exact event encodings, pinning, socket placement, unsuccessful samples, and
+run randomization.
+
+\textbf{Statistical validity.} Intervals from one run are correlated. We therefore
+split and bootstrap runs/concurrent groups, but nine pilot test runs remain too few for
+a transition conclusion. Multiple seeds and paired group resampling reduce, but do not
+eliminate, uncertainty.
+
+\textbf{External validity.} The pilot covers five PARSEC programs on one Ivy Bridge
+server with task-local events. Results may not transfer to different PMUs, production
+services, SMT, other sockets, or unseen co-runners. Workload-disjoint, pair-disjoint,
+and preferably second-generation CPU experiments are required.
+
+\textbf{Implementation validity.} Byte and comparison counts are analytical. They
+exclude counter read energy, control integration, timing closure, and actuator cost.
+RTL synthesis or carefully qualified firmware measurements are needed before calling
+the predictor implemented hardware.
+
+\section{Conclusion}
+
+Compact phase prediction should be evaluated as a measurement interface, not only as
+a classifier. \system separates an offline global teacher from one-counter-per-family
+online signals, distinguishes oracle persistence from deployable baselines, and reports
+execution-group uncertainty and complete interface storage. An audited pilot finds a
+small but reliable accuracy gain from history and a promising, not yet conclusive,
+transition gain. It also reveals material PMU enabled-time variation and $k$ sensitivity. Those
+findings define the evidence required for the final multicore study: all co-runner
+pairs, reduced-profile overhead, workload-disjoint tests, robust phase selection, and
+no proxy energy claims.
+
+\bibliographystyle{IEEEtran}
+\bibliography{references}
+
+\end{document}

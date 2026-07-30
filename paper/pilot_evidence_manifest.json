@@ -1,0 +1,70 @@
+{
+  "status": "internal_pilot_not_submission_evidence",
+  "generated_date": "2026-07-29",
+  "base_git_commit": "63177e5524ff9ea5739b322768550a9217ad9867",
+  "note": "The working tree contains the methodology fixes used for these outputs; the final multicore datasets were not visible in this environment.",
+  "config": "config/ispass2027_validation.json",
+  "scratch_root": "/scratch/kk6081/ispass2027/independent_validation_20260729",
+  "artifacts": {
+    "input_safe_counter_csv": {
+      "path": "/scratch/kk6081/ispass2027/independent_validation_20260729/merged_safe_counters.csv",
+      "sha256": "0b61d53e7ced18f76aba53e9c27e79a05534803796970d8ddc80fd100dbe40ab"
+    },
+    "configuration_holdout_summary": {
+      "path": "/scratch/kk6081/ispass2027/independent_validation_20260729/results_v2/phase_detector/phase_detector_summary_all.csv",
+      "sha256": "e759b3c9cd73b0cd1bc64ca1b4caec50db13b5ec7da97a923821dcef7d2b2ac6"
+    },
+    "configuration_holdout_paired_bootstrap": {
+      "path": "/scratch/kk6081/ispass2027/independent_validation_20260729/results_v2/history_vs_current_paired_bootstrap.json",
+      "sha256": "f77b451b285efffb726f74e0250fc43b72fb8e10a7fc29342779a7dc55273462"
+    },
+    "leave_one_workload_out_summary": {
+      "path": "/scratch/kk6081/ispass2027/independent_validation_20260729/loo_v2/results/phase_detector/phase_detector_summary_all.csv",
+      "sha256": "ded161ee57a9f3ab23db395d5130a7bbd776d087de4157b81a1e03a6a1bc3dfa"
+    },
+    "cluster_stability": {
+      "path": "/scratch/kk6081/ispass2027/independent_validation_20260729/phase_cluster_stability.csv",
+      "sha256": "97fa09f2f1709b8fd846cf3850610c7bbe539bd4c1fabe1b169ccf8acb36553a"
+    },
+    "pmu_collection_quality": {
+      "path": "/scratch/kk6081/ispass2027/independent_validation_20260729/pilot_raw_quality/processed/pmu_collection_quality.csv",
+      "sha256": "bb8541383d64217a9ebcd9d7e7e1471fd139e540daa6f9719073f6cf2adff549"
+    }
+  },
+  "configuration_holdout": {
+    "test_windows": 1341,
+    "test_execution_groups": 9,
+    "true_transitions": 31,
+    "current_state_tree": {
+      "accuracy": 0.9761372110365399,
+      "macro_f1": 0.954525354190677,
+      "transition_destination_accuracy": 0.12903225806451613,
+      "transition_event_precision": 0.5454545454545454,
+      "transition_event_recall": 0.1935483870967742,
+      "transition_event_f1": 0.2857142857142857,
+      "estimated_bytes": 64.875
+    },
+    "history_tree": {
+      "accuracy": 0.9821029082774049,
+      "accuracy_ci95": [0.97643362136685, 0.9871016691957512],
+      "macro_f1": 0.968803452773141,
+      "transition_destination_accuracy": 0.25806451612903225,
+      "transition_event_precision": 0.9,
+      "transition_event_recall": 0.2903225806451613,
+      "transition_event_f1": 0.4390243902439024,
+      "estimated_bytes": 201.25
+    },
+    "paired_history_minus_current": {
+      "accuracy_difference": 0.005968860040544238,
+      "accuracy_difference_ci95": [0.002926115581565414, 0.009202984490458073],
+      "transition_destination_accuracy_difference": 0.12945683455037973,
+      "transition_destination_accuracy_difference_ci95": [0.0, 0.2692307692307693]
+    }
+  },
+  "leave_one_workload_out_means": {
+    "current_state_tree_accuracy": 0.9301420808706253,
+    "history_tree_accuracy": 0.9460141012913831,
+    "current_state_tree_transition_destination_accuracy": 0.22517704484911083,
+    "history_tree_transition_destination_accuracy": 0.43931924116163407
+  }
+}

@@ -11,7 +11,7 @@ from .ablation import run_ablation
 from .config import load_config
 from .labels import build_counter_sequences
 from .orchestration import experiment_dirs, scopes_for_experiment
-from .train_phase_detector import run_phase_detector_depth_sweep_for_experiment, train_phase_detector_for_experiment
+from .train_phase_detector import train_phase_detector_for_experiment
 
 
 def run_pipeline_for_dataset(
@@ -81,8 +81,6 @@ def run_pipeline_for_dataset(
     )
 
     detector_rows: list[dict[str, object]] = []
-    detector_sweep_rows: list[dict[str, object]] = []
-    sweep_depths = [int(item) for item in detector_cfg.get("depth_sweep_depths", []) if int(item) > 0]
     for exp_dir in experiment_dirs(sequences_root):
         for scope in scopes_for_experiment(exp_dir):
             detector_rows.extend(
@@ -95,34 +93,18 @@ def run_pipeline_for_dataset(
                     prediction_horizon=int(detector_cfg["prediction_horizon"]),
                     tree_max_depth=int(detector_cfg["decision_tree_max_depth"]),
                     tree_min_leaf=int(detector_cfg["decision_tree_min_samples_leaf"]),
+                    detector_config=detector_cfg,
                 )
             )
-            if sweep_depths:
-                detector_sweep_rows.extend(
-                    run_phase_detector_depth_sweep_for_experiment(
-                        experiment_dir=exp_dir,
-                        scope=scope,
-                        output_dir=detector_root / exp_dir.name / scope,
-                        horizon=sequence_horizon,
-                        history_length=int(detector_cfg["history_length"]),
-                        prediction_horizon=int(detector_cfg["prediction_horizon"]),
-                        tree_depths=sweep_depths,
-                        tree_min_leaf=int(detector_cfg["decision_tree_min_samples_leaf"]),
-                    )
-                )
     write_csv_rows(detector_root / "phase_detector_summary_all.csv", detector_rows)
-    if detector_sweep_rows:
-        write_csv_rows(detector_root / "phase_detector_depth_sweep_summary_all.csv", detector_sweep_rows)
 
     summary = {
         "ablation_rows": len(ablation_rows),
         "phase_detector_rows": len(detector_rows),
-        "phase_detector_sweep_rows": len(detector_sweep_rows),
     }
     print(
         f"Pipeline complete: ablation={summary['ablation_rows']} "
-        f"phase_detector_rows={summary['phase_detector_rows']} "
-        f"phase_detector_sweep_rows={summary['phase_detector_sweep_rows']}"
+        f"phase_detector_rows={summary['phase_detector_rows']}"
     )
     return summary
 

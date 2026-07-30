@@ -69,10 +69,9 @@ DEFAULT_FAMILY_ML_CONFIG: dict[str, Any] = {
     },
     "phase_detector": {
         "history_length": 20,
-        "prediction_horizon": 5,
+        "prediction_horizon": 1,
         "decision_tree_max_depth": 6,
         "decision_tree_min_samples_leaf": 8,
-        "depth_sweep_depths": [],
     },
     "experiments": {
         "modes": ["config_group_holdout"],

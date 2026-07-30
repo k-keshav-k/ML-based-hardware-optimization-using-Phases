@@ -24,6 +24,7 @@ EXPERIMENT_METADATA_COLUMNS = [
     "process_index",
     "process_count",
     "co_running_workloads",
+    "pairing_mode",
     "collection_scope",
     "core_collection_scope",
 ]
@@ -34,6 +35,76 @@ def attach_experiment_metadata(item: dict[str, object], metadata: dict[str, obje
     for column in EXPERIMENT_METADATA_COLUMNS:
         if column in metadata:
             item[column] = metadata.get(column, "")
+
+
+def attach_pmu_quality(item: dict[str, object], family: str, perf_row: dict[str, str]) -> None:
+    """Preserve multiplexing quality without exposing it as a model feature."""
+
+    enabled = safe_float(perf_row.get("enabled_pct", ""))
+    if not math.isnan(enabled):
+        column = f"pmu_enabled_pct__{family}"
+        current = safe_float(item.get(column, ""))
+        item[column] = enabled if math.isnan(current) else min(current, enabled)
+    runtime = safe_float(perf_row.get("runtime_ns", ""))
+    if not math.isnan(runtime):
+        column = f"pmu_runtime_ns__{family}"
+        current = safe_float(item.get(column, ""))
+        item[column] = runtime if math.isnan(current) else current + runtime
+
+
+def _percentile(values: list[float], quantile: float) -> float:
+    if not values:
+        return math.nan
+    ordered = sorted(values)
+    position = (len(ordered) - 1) * quantile
+    lower = int(math.floor(position))
+    upper = int(math.ceil(position))
+    if lower == upper:
+        return ordered[lower]
+    fraction = position - lower
+    return ordered[lower] * (1.0 - fraction) + ordered[upper] * fraction
+
+
+def pmu_collection_quality_rows(rows: list[dict[str, object]]) -> list[dict[str, object]]:
+    """Summarize counter scheduling quality for publication and audit artifacts."""
+
+    families = sorted(
+        {
+            key.split("__", 1)[1]
+            for row in rows
+            for key in row
+            if key.startswith("pmu_enabled_pct__")
+        }
+    )
+    output: list[dict[str, object]] = []
+    for family in families:
+        enabled = [
+            value
+            for row in rows
+            if not math.isnan(value := safe_float(row.get(f"pmu_enabled_pct__{family}", "")))
+        ]
+        runtime = [
+            value
+            for row in rows
+            if not math.isnan(value := safe_float(row.get(f"pmu_runtime_ns__{family}", "")))
+        ]
+        output.append(
+            {
+                "counter_family": family,
+                "samples": len(enabled),
+                "enabled_pct_mean": statistics.fmean(enabled) if enabled else math.nan,
+                "enabled_pct_p05": _percentile(enabled, 0.05),
+                "enabled_pct_min": min(enabled) if enabled else math.nan,
+                "fraction_enabled_below_90pct": (
+                    sum(value < 90.0 for value in enabled) / len(enabled) if enabled else math.nan
+                ),
+                "fraction_enabled_zero": (
+                    sum(value <= 0.0 for value in enabled) / len(enabled) if enabled else math.nan
+                ),
+                "runtime_ns_mean": statistics.fmean(runtime) if runtime else math.nan,
+            }
+        )
+    return output
 
 
 def load_phase_rows(path: Path) -> list[dict[str, str]]:
@@ -128,6 +199,7 @@ def aggregate_uncore_interval_rows(run_dir: Path, metadata: dict[str, object]) -
             continue
         key = f"{timestamp:.3f}"
         item = grouped.setdefault(key, {"timestamp_ms": timestamp})
+        attach_pmu_quality(item, family, row)
         column = f"counter__{family}"
         current = safe_float(item.get(column, ""))
         value = safe_float(row.get("value", ""))
@@ -182,7 +254,7 @@ def align_uncore_rows(
         if math.isnan(closest_timestamp) or abs(closest_timestamp - core_timestamp) > tolerance:
             continue
         for key, value in closest.items():
-            if key.startswith("counter__"):
+            if key.startswith("counter__") or key.startswith("pmu_"):
                 core_row[key] = value
         attached += 1
     return attached
@@ -220,6 +292,7 @@ def merge_interval_rows(run_dir: Path) -> tuple[list[dict[str, object]], int]:
         item["physical_core_id"] = physical_core_id
         family = reverse.get(normalize_event_name(row.get("event_name", "")))
         if family:
+            attach_pmu_quality(item, family, row)
             column = f"counter__{family}"
             current = safe_float(item.get(column, ""))
             value = safe_float(row.get("value", ""))
@@ -262,6 +335,7 @@ def merge_aggregate_rows(run_dir: Path) -> list[dict[str, object]]:
         item["physical_core_id"] = physical_core_id
         family = reverse.get(normalize_event_name(row.get("event_name", "")))
         if family:
+            attach_pmu_quality(item, family, row)
             column = f"counter__{family}"
             current = safe_float(item.get(column, ""))
             value = safe_float(row.get("value", ""))
@@ -325,6 +399,8 @@ def main() -> None:
 
     write_csv_rows(output_dir / "merged_interval_dataset.csv", interval_rows)
     write_csv_rows(output_dir / "merged_aggregate_dataset.csv", aggregate_rows)
+    pmu_quality = pmu_collection_quality_rows(interval_rows)
+    write_csv_rows(output_dir / "pmu_collection_quality.csv", pmu_quality)
     summary = {
         "run_count": len(run_dirs),
         "manifest_run_count": provenance["manifest_run_count"],
@@ -335,6 +411,8 @@ def main() -> None:
         "interval_rows": len(interval_rows),
         "aggregate_rows": len(aggregate_rows),
         "uncore_aligned_interval_rows": uncore_aligned_rows,
+        "pmu_quality_families": len(pmu_quality),
+        "pmu_quality_dataset": str(output_dir / "pmu_collection_quality.csv"),
         "observed_system_wide_uncore_columns": sorted(
             {
                 key

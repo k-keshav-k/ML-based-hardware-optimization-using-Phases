@@ -44,7 +44,7 @@ def _fill_train_medians(matrix: np.ndarray, train_mask: np.ndarray) -> np.ndarra
     return filled
 
 
-def _eval_mask(split: np.ndarray) -> np.ndarray:
+def _selection_mask(split: np.ndarray) -> np.ndarray:
     val = split == "val"
     if np.any(val):
         return val
@@ -52,6 +52,32 @@ def _eval_mask(split: np.ndarray) -> np.ndarray:
     if np.any(test):
         return test
     return split != "train"
+
+
+def _report_mask(split: np.ndarray) -> np.ndarray:
+    test = split == "test"
+    if np.any(test):
+        return test
+    val = split == "val"
+    if np.any(val):
+        return val
+    return split != "train"
+
+
+def _selection_split_name(split: np.ndarray) -> str:
+    if np.any(split == "val"):
+        return "val"
+    if np.any(split == "test"):
+        return "test"
+    return "non_train"
+
+
+def _report_split_name(split: np.ndarray) -> str:
+    if np.any(split == "test"):
+        return "test"
+    if np.any(split == "val"):
+        return "val"
+    return "non_train"
 
 
 def _weighted_score(metrics: dict[str, float], weights: dict[str, float]) -> float:
@@ -104,6 +130,9 @@ def run_ablation(
     family_counter_data = _load_family_counter_sequences(experiment_dir, scope, horizon)
     output_rows: list[dict[str, object]] = []
     singleton_scores: dict[tuple[str, str], float] = {}
+    singleton_report_scores: dict[tuple[str, str], float] = {}
+    selection_split = ""
+    report_split = ""
 
     # Per-family sweep: score each counter against its own state sequence.
     for family in sorted(FAMILY_COUNTERS):
@@ -140,22 +169,33 @@ def run_ablation(
             x = _fill_train_medians(x, train_mask)
             valid_target = targets >= 0
             if not np.any(valid_target):
-                metrics = {
+                selection_metrics = {
                     "accuracy": 0.0,
                     "macro_f1": 0.0,
                     "high_usage_recall": 0.0,
                 }
+                report_metrics = dict(selection_metrics)
                 score = 0.0
+                report_score = 0.0
             else:
-                eval_mask = _eval_mask(split)
+                selection_split = _selection_split_name(split)
+                report_split = _report_split_name(split)
+                selection_mask = _selection_mask(split)
+                report_mask = _report_mask(split)
                 pred = _fit_predict_tree(x, targets, split, tree_max_depth, tree_min_samples_leaf)
-                usable = eval_mask & valid_target
-                if not np.any(usable):
-                    usable = valid_target
-                metrics = classification_metrics(targets[usable], pred[usable], current_state=current[usable])
-                score = _weighted_score(metrics, weights)
+                selection_usable = selection_mask & valid_target
+                if not np.any(selection_usable):
+                    selection_usable = valid_target
+                report_usable = report_mask & valid_target
+                if not np.any(report_usable):
+                    report_usable = selection_usable
+                selection_metrics = classification_metrics(targets[selection_usable], pred[selection_usable], current_state=current[selection_usable])
+                report_metrics = classification_metrics(targets[report_usable], pred[report_usable], current_state=current[report_usable])
+                score = _weighted_score(selection_metrics, weights)
+                report_score = _weighted_score(report_metrics, weights)
             key = counter
             singleton_scores[(family, counter)] = score
+            singleton_report_scores[(family, counter)] = report_score
             if score > best_score:
                 best_score = score
                 best_key = key
@@ -165,8 +205,19 @@ def run_ablation(
                     "scope": scope,
                     "candidate_type": "singleton",
                     "counter_set": key,
-                    **metrics,
+                    "selection_split": selection_split,
+                    "report_split": report_split,
+                    "selection_accuracy": selection_metrics["accuracy"],
+                    "selection_macro_f1": selection_metrics["macro_f1"],
+                    "selection_high_usage_recall": selection_metrics["high_usage_recall"],
+                    "report_accuracy": report_metrics["accuracy"],
+                    "report_macro_f1": report_metrics["macro_f1"],
+                    "report_high_usage_recall": report_metrics["high_usage_recall"],
+                    "accuracy": report_metrics["accuracy"],
+                    "macro_f1": report_metrics["macro_f1"],
+                    "high_usage_recall": report_metrics["high_usage_recall"],
                     "validation_score": score,
+                    "report_score": report_score,
                     "selected": 0,
                     "target_source": "counter_sequence",
                 }
@@ -193,7 +244,9 @@ def run_ablation(
             selected = list(combo)
             family_counter_map = {family: counter for family, counter in zip(families, selected)}
             combo_scores = [singleton_scores[(family, counter)] for family, counter in family_counter_map.items()]
+            combo_report_scores = [singleton_report_scores[(family, counter)] for family, counter in family_counter_map.items()]
             aggregate = float(np.mean(combo_scores)) if combo_scores else 0.0
+            report_aggregate = float(np.mean(combo_report_scores)) if combo_report_scores else 0.0
             combo_key = ",".join(selected)
             if aggregate > best_score:
                 best_score = aggregate
@@ -205,10 +258,13 @@ def run_ablation(
                     "candidate_type": "one_per_family_exhaustive",
                     "counter_set": combo_key,
                     "family_counter_map": ";".join(f"{family}:{counter}" for family, counter in family_counter_map.items()),
+                    "selection_split": selection_split,
+                    "report_split": report_split,
                     "accuracy": "",
                     "macro_f1": "",
                     "high_usage_recall": "",
                     "validation_score": aggregate,
+                    "report_score": report_aggregate,
                     "selected": 0,
                 }
             )
